@@ -7,6 +7,8 @@
 
 透明窗口、置顶、托盘、拖窗、多屏适配和 Electron 安装包不会迁入。模型密钥统一保存在 Pi，工作台与桌宠都通过同一控制面板选择 DeepSeek、智谱 GLM 或 CosyVoice。
 
+当前 0.4.0 已打通正式版角色发行流程：工作台发布不可变交付包后，Pi 会校验 checksum 和玩家可见字段，再依据主动联系授权、暂停、勿扰、24 小时间隔、每周上限、版本消息频率和召回授权决定发送或延后；内容还会经过本地安全规则与可降级的模型语义评审，最终进入手机通信中心。非法交付会进入隔离目录，不会影响主服务。
+
 ## 部署到 Orange Pi
 
 要求：64 位 Linux、Git、Docker Engine 和 Docker Compose plugin。
@@ -78,11 +80,12 @@ curl http://127.0.0.1:3000/api/project/current
 - 统一模型设置：`.data/control-plane.json`
 - 桌宠会话与同行数据：`.data/hardware-pi.db`
 - 工作台项目、来源与发行数据：`.data/workbench/`
+- 工作台与桌宠发行桥：`.data/bridge/`
 
 接口与鉴权见 [docs/API.md](docs/API.md)，迁移边界见 [docs/MIGRATION_PLAN.md](docs/MIGRATION_PLAN.md)。
 
 ## 尚未完成
 
 - CosyVoice 流式语音和手机播放队列；
-- 主动联系的完整勿扰、频率与发送前评审策略；
-- 正式桌宠旧数据导入及角色发行桥接真机验收。
+- 正式桌宠 v4 旧数据导入；
+- Orange Pi ARM64 上的角色发行桥接与断电恢复真机验收。

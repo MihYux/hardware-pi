@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   ArrowRight,
+  ArrowsClockwise,
   Bell,
   BookOpenText,
   Camera,
@@ -24,6 +25,7 @@ import {
   deleteCompanionData,
   deleteMemory,
   exportCompanionData,
+  scanReleaseQueue,
   updateCommunication,
   updateCompanionProfile,
   updateMemory,
@@ -247,7 +249,7 @@ export function Onboarding({
             <label className="onboarding-toggle-row">
               <span>
                 <strong>允许主动联系</strong>
-                <small>完整联系策略将在后续阶段启用</small>
+                <small>遵守勿扰时段、24 小时间隔和每周上限</small>
               </span>
               <input
                 type="checkbox"
@@ -592,6 +594,7 @@ export function CommunicationsPage({ snapshot, onRefresh }: SnapshotProps) {
   );
   const [filter, setFilter] = useState<"all" | "unread" | "favorite">("all");
   const [notice, setNotice] = useState("");
+  const [scanning, setScanning] = useState(false);
   const markedRead = useRef(new Set<string>());
   const selected = snapshot.communications.find(
     (message) => message.id === selectedId,
@@ -626,6 +629,23 @@ export function CommunicationsPage({ snapshot, onRefresh }: SnapshotProps) {
     }
   }
 
+  async function scan() {
+    setScanning(true);
+    setNotice("");
+    try {
+      const result = await scanReleaseQueue();
+      await onRefresh();
+      const processing = result.processing;
+      setNotice(
+        `检查完成：发送 ${processing.delivered}，延后 ${processing.deferred}，拒绝 ${processing.rejected}`,
+      );
+    } catch (error) {
+      setNotice((error as Error).message);
+    } finally {
+      setScanning(false);
+    }
+  }
+
   return (
     <section className="communication-panel embedded" aria-label="角色通信中心">
       <header className="panel-section-header">
@@ -636,6 +656,28 @@ export function CommunicationsPage({ snapshot, onRefresh }: SnapshotProps) {
         </div>
         <EnvelopeSimple weight="duotone" />
       </header>
+      <div className="release-queue-status">
+        <span>
+          <strong>{snapshot.release_delivery.counts.queued}</strong>
+          等待
+        </span>
+        <span>
+          <strong>{snapshot.release_delivery.counts.deferred}</strong>
+          因联系策略延后
+        </span>
+        <span>
+          <strong>{snapshot.release_delivery.counts.delivered}</strong>
+          已发送
+        </span>
+        <span>
+          <strong>{snapshot.release_delivery.counts.rejected}</strong>
+          审核拒绝
+        </span>
+        <button disabled={scanning} onClick={() => void scan()}>
+          <ArrowsClockwise className={scanning ? "spinning" : ""} />
+          {scanning ? "正在检查" : "检查发行队列"}
+        </button>
+      </div>
       <div className="communication-filters">
         {(["all", "unread", "favorite"] as const).map((value) => (
           <button
@@ -708,7 +750,11 @@ export function CommunicationsPage({ snapshot, onRefresh }: SnapshotProps) {
                 </button>
               </div>
               <footer>
-                审核状态：{selected.review_status} · 数据保存在 Orange Pi
+                审核状态：{selected.review_status}
+                {selected.delivery_mode === "proactive"
+                  ? ` · ${selected.review_mode === "hybrid" ? "模型 + 本地规则" : "本地规则降级"}`
+                  : ""}
+                {" · "}数据保存在 Orange Pi
               </footer>
             </>
           ) : (

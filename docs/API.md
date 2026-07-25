@@ -173,7 +173,7 @@ Authorization: Bearer <device-token>
 
 ## 角色通信
 
-当前阶段由首次进入流程创建一封已审核欢迎通信。ReHoYo 发行消息写入、校验和隔离队列将在发行桥接阶段开放；当前 API 不允许手机自行创建通信。
+首次进入流程会创建一封已审核欢迎通信。ReHoYo 工作台发行消息通过共享目录自动进入 Pi；手机不能自行创建通信。Pi 会先执行交付校验、主动联系策略和发送前评审，合法且允许触达的消息才会显示。
 
 ```http
 PATCH /api/v1/communications/<message-id>
@@ -189,6 +189,30 @@ Content-Type: application/json
 ```
 
 通信中心只返回 `review_status=approved` 且已经发送的消息。
+
+管理端可以查看或立即检查发行队列：
+
+```http
+GET /api/v1/release/status
+X-Admin-Token: <admin-token>
+```
+
+```http
+POST /api/v1/release/scan
+X-Admin-Token: <admin-token>
+```
+
+大型项目也可以绕过共享目录，通过服务令牌推送与工作台相同的不可变交付包：
+
+```http
+POST /api/v1/release/deliveries
+Authorization: Bearer <service-token>
+Content-Type: application/json
+```
+
+请求必须包含 `schemaVersion=1`、`deliveryId`、`region`、`plan` 和以 compact JSON 计算的 SHA-256 `checksum`。同一 `deliveryId` 只处理一次；校验失败返回错误，目录入口的错误文件会移到 `.data/bridge/quarantine/`。
+
+因玩家关闭主动联系、暂停同行、处于勿扰时段或超过频率限制的合法交付会保留为 `deferred` 并在之后重试，不会静默丢失。安全规则或语义评审明确拒绝的内容标记为 `rejected`。
 
 ## 导出与删除
 

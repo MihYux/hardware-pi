@@ -102,6 +102,28 @@ export type Communication = {
     kind: "none" | "open_album" | "open_version_demo";
     target_id: string | null;
   };
+  delivery_mode: "system" | "proactive";
+  template_id: string;
+  source_delivery_id: string;
+  review_mode: "local_rules" | "local_fallback" | "hybrid";
+  review_reason: string;
+};
+
+export type ReleaseDeliveryStatus = {
+  counts: {
+    queued: number;
+    deferred: number;
+    delivered: number;
+    rejected: number;
+  };
+  recent: Array<{
+    delivery_id: string;
+    status: "queued" | "deferred" | "delivered" | "rejected";
+    last_reason: string;
+    created_at: string;
+    updated_at: string;
+    delivered_at: string | null;
+  }>;
 };
 
 export type CompanionSnapshot = {
@@ -109,6 +131,7 @@ export type CompanionSnapshot = {
   profile: CompanionProfile;
   memories: MemoryRecord[];
   communications: Communication[];
+  release_delivery: ReleaseDeliveryStatus;
   counts: {
     memories: number;
     communications: number;

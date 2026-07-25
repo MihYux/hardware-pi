@@ -205,6 +205,20 @@ export async function updateCommunication(
   return parseResponse<Communication>(response);
 }
 
+export async function scanReleaseQueue(): Promise<{
+  processing: {
+    delivered: number;
+    deferred: number;
+    rejected: number;
+  };
+}> {
+  const response = await fetch("/api/v1/release/scan", {
+    method: "POST",
+    headers: { "X-Admin-Token": adminToken() },
+  });
+  return parseResponse(response);
+}
+
 export async function exportCompanionData(): Promise<unknown> {
   const response = await fetch("/api/v1/companion/export", {
     headers: deviceHeaders(),

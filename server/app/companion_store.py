@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 import sqlite3
 import threading
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from uuid import uuid4
 
@@ -108,7 +108,25 @@ class CompanionStore:
                     liked INTEGER NOT NULL,
                     remind_later INTEGER NOT NULL,
                     action_kind TEXT NOT NULL,
-                    action_target_id TEXT
+                    action_target_id TEXT,
+                    delivery_mode TEXT NOT NULL DEFAULT 'system',
+                    template_id TEXT NOT NULL DEFAULT '',
+                    source_delivery_id TEXT NOT NULL DEFAULT '',
+                    review_mode TEXT NOT NULL DEFAULT 'local_rules',
+                    review_reason TEXT NOT NULL DEFAULT ''
+                );
+
+                CREATE TABLE IF NOT EXISTS release_deliveries (
+                    delivery_id TEXT PRIMARY KEY,
+                    checksum TEXT NOT NULL,
+                    payload TEXT NOT NULL,
+                    status TEXT NOT NULL,
+                    attempts INTEGER NOT NULL DEFAULT 0,
+                    last_reason TEXT NOT NULL DEFAULT '',
+                    next_attempt_at TEXT NOT NULL,
+                    created_at TEXT NOT NULL,
+                    updated_at TEXT NOT NULL,
+                    delivered_at TEXT
                 );
 
                 CREATE TABLE IF NOT EXISTS companion_audit (
@@ -122,9 +140,59 @@ class CompanionStore:
                 ON memories(created_at DESC);
                 CREATE INDEX IF NOT EXISTS communications_created
                 ON communications(created_at DESC);
+                CREATE INDEX IF NOT EXISTS release_delivery_queue
+                ON release_deliveries(status, next_attempt_at);
                 """
             )
+            self._ensure_column(
+                connection,
+                "communications",
+                "delivery_mode",
+                "TEXT NOT NULL DEFAULT 'system'",
+            )
+            self._ensure_column(
+                connection,
+                "communications",
+                "template_id",
+                "TEXT NOT NULL DEFAULT ''",
+            )
+            self._ensure_column(
+                connection,
+                "communications",
+                "source_delivery_id",
+                "TEXT NOT NULL DEFAULT ''",
+            )
+            self._ensure_column(
+                connection,
+                "communications",
+                "review_mode",
+                "TEXT NOT NULL DEFAULT 'local_rules'",
+            )
+            self._ensure_column(
+                connection,
+                "communications",
+                "review_reason",
+                "TEXT NOT NULL DEFAULT ''",
+            )
             self._ensure_profile(connection)
+
+    @staticmethod
+    def _ensure_column(
+        connection: sqlite3.Connection,
+        table: str,
+        column: str,
+        declaration: str,
+    ) -> None:
+        existing = {
+            row["name"]
+            for row in connection.execute(
+                f"PRAGMA table_info({table})"
+            ).fetchall()
+        }
+        if column not in existing:
+            connection.execute(
+                f"ALTER TABLE {table} ADD COLUMN {column} {declaration}"
+            )
 
     def _ensure_profile(self, connection: sqlite3.Connection) -> None:
         now = utc_now()
@@ -223,6 +291,11 @@ class CompanionStore:
                 "kind": row["action_kind"],
                 "target_id": row["action_target_id"],
             },
+            "delivery_mode": row["delivery_mode"],
+            "template_id": row["template_id"],
+            "source_delivery_id": row["source_delivery_id"],
+            "review_mode": row["review_mode"],
+            "review_reason": row["review_reason"],
         }
 
     def profile(self) -> dict:
@@ -251,6 +324,48 @@ class CompanionStore:
             ).fetchall()
         return [self._communication_dict(row) for row in rows]
 
+    def policy_messages(self) -> list[dict]:
+        with self._lock, self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT * FROM communications
+                WHERE review_status = 'approved' AND sent_at IS NOT NULL
+                ORDER BY sent_at DESC
+                """
+            ).fetchall()
+        return [self._communication_dict(row) for row in rows]
+
+    def release_status(self) -> dict:
+        with self._lock, self._connect() as connection:
+            rows = connection.execute(
+                """
+                SELECT status, COUNT(*) AS count
+                FROM release_deliveries
+                GROUP BY status
+                """
+            ).fetchall()
+            recent = connection.execute(
+                """
+                SELECT delivery_id, status, last_reason, created_at,
+                       updated_at, delivered_at
+                FROM release_deliveries
+                ORDER BY created_at DESC
+                LIMIT 10
+                """
+            ).fetchall()
+        counts = {
+            "queued": 0,
+            "deferred": 0,
+            "delivered": 0,
+            "rejected": 0,
+        }
+        for row in rows:
+            counts[row["status"]] = row["count"]
+        return {
+            "counts": counts,
+            "recent": [dict(row) for row in recent],
+        }
+
     def snapshot(self) -> dict:
         profile = self.profile()
         memories = self.memories()
@@ -260,6 +375,7 @@ class CompanionStore:
             "profile": profile,
             "memories": memories,
             "communications": communications,
+            "release_delivery": self.release_status(),
             "counts": {
                 "memories": len(memories),
                 "communications": len(communications),
@@ -560,11 +676,224 @@ class CompanionStore:
         with self._lock, self._connect() as connection:
             connection.execute("DELETE FROM memories")
             connection.execute("DELETE FROM communications")
+            connection.execute("DELETE FROM release_deliveries")
             connection.execute("DELETE FROM companion_audit")
             connection.execute("DELETE FROM companion_profile")
             self._ensure_profile(connection)
             self._audit(connection, "companion_data.deleted")
         return self.snapshot()
+
+    def queue_release_delivery(
+        self,
+        delivery: dict,
+        checksum: str,
+    ) -> dict:
+        delivery_id = str(delivery.get("deliveryId") or "")
+        if not delivery_id:
+            raise ValueError("发行交付缺少 deliveryId。")
+        now = utc_now()
+        payload = json.dumps(
+            delivery,
+            ensure_ascii=False,
+            separators=(",", ":"),
+        )
+        with self._lock, self._connect() as connection:
+            existing = connection.execute(
+                """
+                SELECT checksum, status FROM release_deliveries
+                WHERE delivery_id = ?
+                """,
+                (delivery_id,),
+            ).fetchone()
+            if existing and existing["checksum"] != checksum:
+                raise ValueError("同一 deliveryId 的校验值发生冲突。")
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO release_deliveries(
+                    delivery_id, checksum, payload, status, attempts,
+                    last_reason, next_attempt_at, created_at, updated_at,
+                    delivered_at
+                ) VALUES (?, ?, ?, 'queued', 0, '', ?, ?, ?, NULL)
+                """,
+                (delivery_id, checksum, payload, now, now, now),
+            )
+            if not existing:
+                self._audit(
+                    connection,
+                    "release_delivery.queued",
+                    delivery_id,
+                )
+            row = connection.execute(
+                """
+                SELECT status, last_reason FROM release_deliveries
+                WHERE delivery_id = ?
+                """,
+                (delivery_id,),
+            ).fetchone()
+        return {
+            "status": row["status"],
+            "reason": row["last_reason"],
+        }
+
+    def pending_release_deliveries(
+        self,
+        *,
+        limit: int = 10,
+        now: str | None = None,
+        force: bool = False,
+    ) -> list[dict]:
+        threshold = now or utc_now()
+        with self._lock, self._connect() as connection:
+            if force:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM release_deliveries
+                    WHERE status IN ('queued', 'deferred')
+                    ORDER BY created_at ASC
+                    LIMIT ?
+                    """,
+                    (limit,),
+                ).fetchall()
+            else:
+                rows = connection.execute(
+                    """
+                    SELECT * FROM release_deliveries
+                    WHERE status IN ('queued', 'deferred')
+                      AND next_attempt_at <= ?
+                    ORDER BY created_at ASC
+                    LIMIT ?
+                    """,
+                    (threshold, limit),
+                ).fetchall()
+        return [
+            {
+                "delivery_id": row["delivery_id"],
+                "checksum": row["checksum"],
+                "payload": json.loads(row["payload"]),
+                "status": row["status"],
+                "attempts": row["attempts"],
+            }
+            for row in rows
+        ]
+
+    def defer_release_delivery(
+        self,
+        delivery_id: str,
+        reason: str,
+        *,
+        retry_after_seconds: int = 60,
+    ) -> None:
+        now = datetime.now(timezone.utc)
+        retry_at = now + timedelta(seconds=retry_after_seconds)
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE release_deliveries
+                SET status = 'deferred', attempts = attempts + 1,
+                    last_reason = ?, next_attempt_at = ?, updated_at = ?
+                WHERE delivery_id = ?
+                  AND status IN ('queued', 'deferred')
+                """,
+                (
+                    reason,
+                    retry_at.isoformat(),
+                    now.isoformat(),
+                    delivery_id,
+                ),
+            )
+
+    def reject_release_delivery(
+        self,
+        delivery_id: str,
+        reason: str,
+    ) -> None:
+        now = utc_now()
+        with self._lock, self._connect() as connection:
+            connection.execute(
+                """
+                UPDATE release_deliveries
+                SET status = 'rejected', attempts = attempts + 1,
+                    last_reason = ?, updated_at = ?
+                WHERE delivery_id = ?
+                  AND status IN ('queued', 'deferred')
+                """,
+                (reason, now, delivery_id),
+            )
+            self._audit(
+                connection,
+                "release_delivery.rejected",
+                delivery_id,
+            )
+
+    def deliver_release_message(
+        self,
+        *,
+        delivery_id: str,
+        content_type: str,
+        title: str,
+        body: str,
+        template_id: str,
+        review_mode: str,
+        review_reason: str,
+    ) -> dict | None:
+        now = utc_now()
+        message_id = f"release-{delivery_id}"
+        with self._lock, self._connect() as connection:
+            delivery = connection.execute(
+                """
+                SELECT status FROM release_deliveries
+                WHERE delivery_id = ?
+                """,
+                (delivery_id,),
+            ).fetchone()
+            if not delivery or delivery["status"] == "delivered":
+                return self.get_communication(message_id)
+            connection.execute(
+                """
+                INSERT OR IGNORE INTO communications(
+                    id, type, title, body, review_status, sent_at,
+                    created_at, read_at, favorite, liked, remind_later,
+                    action_kind, action_target_id, delivery_mode,
+                    template_id, source_delivery_id, review_mode,
+                    review_reason
+                ) VALUES (
+                    ?, ?, ?, ?, 'approved', ?, ?, NULL, 0, 0, 0,
+                    'open_version_demo', ?, 'proactive', ?, ?, ?, ?
+                )
+                """,
+                (
+                    message_id,
+                    content_type,
+                    title,
+                    body,
+                    now,
+                    now,
+                    delivery_id,
+                    template_id,
+                    delivery_id,
+                    review_mode,
+                    review_reason,
+                ),
+            )
+            connection.execute(
+                """
+                UPDATE release_deliveries
+                SET status = 'delivered', attempts = attempts + 1,
+                    last_reason = '', updated_at = ?, delivered_at = ?
+                WHERE delivery_id = ?
+                """,
+                (now, now, delivery_id),
+            )
+            self._audit(
+                connection,
+                "release_delivery.delivered",
+                delivery_id,
+            )
+            row = connection.execute(
+                "SELECT * FROM communications WHERE id = ?",
+                (message_id,),
+            ).fetchone()
+        return self._communication_dict(row) if row else None
 
     def prompt_context(self) -> str:
         snapshot = self.snapshot()

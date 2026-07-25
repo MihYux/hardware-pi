@@ -36,7 +36,7 @@ PY
   echo "Add provider API keys with: nano $ROOT_DIR/.env"
 fi
 
-mkdir -p .data/workbench
+mkdir -p .data/workbench .data/bridge/inbox .data/bridge/processed .data/bridge/quarantine
 chmod 700 .data
 docker compose up -d --build
 

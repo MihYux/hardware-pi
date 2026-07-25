@@ -32,6 +32,16 @@ Hardware Pi 是面向 Orange Pi 的无 Electron 运行时。迁移原则是直�
 - 不包含 API Key 的数据导出；
 - 保留模型配置的同行数据删除。
 
+第四阶段角色发行桥接已在 0.4.0 完成软件迁移：
+
+- 工作台和 FastAPI 共享离线交付目录；
+- 不可变交付包 checksum、文件名、字段安全校验；
+- 幂等回执和非法交付隔离区；
+- HTTP 服务令牌推送入口；
+- 主动联系授权、暂停、召回、勿扰、频率与重复模板策略；
+- 本地规则 + 控制面板 `companion_review` 路由的语义评审；
+- 通信中心队列统计与手动检查。
+
 ## 能力保留与替换
 
 | 原 IPC | Hardware Pi |
@@ -42,7 +52,7 @@ Hardware Pi 是面向 Orange Pi 的无 Electron 运行时。迁移原则是直�
 | `ai:chat` | `POST /api/v1/chat` / WebSocket |
 | `companion:get-data` | `GET /api/v1/companion/snapshot` |
 | `companion:*memory*` | `/api/v1/memories` |
-| `companion:*message*` | `/api/v1/communications/:id`，发行消息写入入口在第四阶段加入 |
+| `companion:*message*` | `/api/v1/communications/:id` 与 `/api/v1/release/*` |
 | `tts:*` | 后续迁移为 `/api/v1/tts` 与音频流 |
 | `window:*` | 永久移除，由手机 PWA 和系统服务承担显示与常驻职责 |
 
@@ -80,11 +90,12 @@ GPIO、摄像头和传感器由上层硬件项目按需扩展，不作为网页�
 
 ### 第四阶段：发行桥接
 
-- 消费 ReHoYo 不可变交付包；
-- HTTP 推送与目录监听双入口；
-- 校验值、幂等与隔离队列；
-- 玩家授权、勿扰与频率策略；
-- DeepSeek 发送前语义评审。
+- [x] 消费 ReHoYo 不可变交付包；
+- [x] HTTP 推送与目录监听双入口；
+- [x] 校验值、幂等与隔离队列；
+- [x] 玩家授权、勿扰与频率策略；
+- [x] 统一控制面板路由的发送前语义评审；
+- [ ] Orange Pi 真机断电恢复与长时间运行验证。
 
 ### 第五阶段：运维
 

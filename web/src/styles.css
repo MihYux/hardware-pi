@@ -1329,6 +1329,65 @@ textarea:disabled {
 }
 
 /* Communication */
+.release-queue-status {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  margin: 0 14px 10px;
+  padding: 8px 9px;
+  overflow-x: auto;
+  border: 1px solid #e9deeb;
+  border-radius: 13px;
+  background: linear-gradient(135deg, #fff9fc, #f7f2fc);
+  scrollbar-width: none;
+}
+
+.release-queue-status > span {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: baseline;
+  gap: 3px;
+  color: #817388;
+  font-size: 8px;
+}
+
+.release-queue-status > span strong {
+  color: #a85683;
+  font-size: 12px;
+}
+
+.release-queue-status > button {
+  display: inline-flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 5px;
+  height: 28px;
+  margin-left: auto;
+  padding: 0 9px;
+  border: 0;
+  border-radius: 9px;
+  color: #fff;
+  background: linear-gradient(135deg, #dc75a4, #9b80d0);
+  cursor: pointer;
+  font-size: 8px;
+  font-weight: 800;
+}
+
+.release-queue-status > button:disabled {
+  cursor: wait;
+  opacity: 0.65;
+}
+
+.release-queue-status .spinning {
+  animation: queue-spin 0.8s linear infinite;
+}
+
+@keyframes queue-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .communication-filters button {
   flex: 0 0 auto;
 }
@@ -2043,6 +2102,16 @@ textarea:disabled {
   .communication-body {
     display: block;
     overflow-y: auto;
+  }
+
+  .release-queue-status {
+    align-items: stretch;
+    flex-wrap: wrap;
+    overflow: visible;
+  }
+
+  .release-queue-status > button {
+    margin-left: 0;
   }
 
   .communication-list {

@@ -12,6 +12,9 @@ services:
       - "${HARDWARE_PI_PORT:-8000}:8000"
     volumes:
       - ./.data:/data
+      - ./.data/bridge:/bridge
+    environment:
+      MARCH7TH_BRIDGE_DIR: /bridge
     healthcheck:
       test:
         [
@@ -46,10 +49,12 @@ services:
       ZHIPU_API_KEY: ${HARDWARE_PI_SERVICE_TOKEN}
       GLM_MODEL: hardware-pi-zhipu-router
       GLM_BASE_URL: http://hardware-pi:8000/api/zhipu/v1
+      MARCH7TH_BRIDGE_DIR: /bridge
     ports:
       - "${HARDWARE_PI_WORKBENCH_PORT:-3000}:3000"
     volumes:
       - ./.data/workbench:/data
+      - ./.data/bridge:/bridge
     healthcheck:
       test:
         [

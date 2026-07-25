@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -34,6 +35,11 @@ from .models import (
     SettingsPatch,
 )
 from .provider import OpenAICompatibleProvider, ProviderError
+from .release_bridge import (
+    ReleaseBridgeConsumer,
+    validate_delivery_envelope,
+)
+from .release_service import ReleaseService
 from .runtime import runtime
 from .security import (
     authorize_websocket,
@@ -52,20 +58,56 @@ chat_service = ChatService(
     conversation_store,
     companion_store,
 )
+release_bridge: ReleaseBridgeConsumer | None = None
+release_service: ReleaseService | None = None
+
+
+async def release_worker(stop: asyncio.Event) -> None:
+    while not stop.is_set():
+        try:
+            if release_bridge:
+                await asyncio.to_thread(release_bridge.scan)
+            if release_service:
+                await release_service.process_pending()
+        except Exception:
+            # A bad delivery is isolated by the bridge. Provider/network
+            # failures must never stop the API or the next queue pass.
+            pass
+        try:
+            await asyncio.wait_for(stop.wait(), timeout=5)
+        except TimeoutError:
+            continue
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    global release_bridge, release_service
     runtime.data_dir.mkdir(parents=True, exist_ok=True)
     settings_store.load()
     conversation_store.initialize()
     companion_store.initialize()
-    yield
+    release_service = ReleaseService(companion_store, settings_store)
+    release_bridge = ReleaseBridgeConsumer(
+        runtime.bridge_dir,
+        companion_store.queue_release_delivery,
+    )
+    release_bridge.initialize()
+    stop = asyncio.Event()
+    worker = asyncio.create_task(release_worker(stop))
+    try:
+        yield
+    finally:
+        stop.set()
+        worker.cancel()
+        try:
+            await worker
+        except asyncio.CancelledError:
+            pass
 
 
 app = FastAPI(
     title="ReHoYo Hardware Pi Control Plane",
-    version="0.3.1",
+    version="0.4.0",
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -189,7 +231,10 @@ async def complete_onboarding(
     request: OnboardingRequest,
     _: None = Depends(require_device),
 ):
-    return companion_store.onboard(request)
+    companion_store.onboard(request)
+    if release_service:
+        await release_service.process_pending(force=True)
+    return companion_store.snapshot()
 
 
 @app.put("/api/v1/companion/profile")
@@ -197,7 +242,10 @@ async def update_companion_profile(
     patch: CompanionProfilePatch,
     _: None = Depends(require_device),
 ):
-    return companion_store.update_profile(patch)
+    companion_store.update_profile(patch)
+    if release_service:
+        await release_service.process_pending(force=True)
+    return companion_store.profile()
 
 
 @app.get("/api/v1/companion/export")
@@ -249,6 +297,52 @@ async def update_communication(
     if not message:
         raise HTTPException(status_code=404, detail="没有找到这条通信。")
     return message
+
+
+@app.get("/api/v1/release/status")
+async def release_status(_: None = Depends(require_admin)):
+    return {
+        "bridge": release_bridge.status() if release_bridge else {},
+        "deliveries": companion_store.release_status(),
+    }
+
+
+@app.post("/api/v1/release/scan")
+async def scan_release_queue(_: None = Depends(require_admin)):
+    bridge_result = (
+        await asyncio.to_thread(release_bridge.scan)
+        if release_bridge
+        else {}
+    )
+    delivery_result = (
+        await release_service.process_pending(force=True)
+        if release_service
+        else {}
+    )
+    return {
+        "bridge": bridge_result,
+        "processing": delivery_result,
+        "deliveries": companion_store.release_status(),
+    }
+
+
+@app.post("/api/v1/release/deliveries", status_code=202)
+async def push_release_delivery(
+    body: dict[str, Any],
+    _: None = Depends(require_service),
+):
+    delivery, checksum = validate_delivery_envelope(body)
+    queued = companion_store.queue_release_delivery(delivery, checksum)
+    processing = (
+        await release_service.process_pending(force=True)
+        if release_service
+        else {}
+    )
+    return {
+        "delivery_id": delivery["deliveryId"],
+        "queue": queued,
+        "processing": processing,
+    }
 
 
 @app.websocket("/api/v1/chat/ws")

@@ -14,6 +14,7 @@ class RuntimeSettings:
     admin_token: str
     device_token: str
     service_token: str
+    bridge_dir: Path
 
     @classmethod
     def from_env(cls) -> "RuntimeSettings":
@@ -27,6 +28,20 @@ class RuntimeSettings:
             admin_token=os.getenv("HARDWARE_PI_ADMIN_TOKEN", ""),
             device_token=os.getenv("HARDWARE_PI_DEVICE_TOKEN", ""),
             service_token=os.getenv("HARDWARE_PI_SERVICE_TOKEN", ""),
+            bridge_dir=Path(
+                os.getenv(
+                    "MARCH7TH_BRIDGE_DIR",
+                    str(
+                        Path(
+                            os.getenv(
+                                "HARDWARE_PI_DATA_DIR",
+                                ".data",
+                            )
+                        )
+                        / "bridge"
+                    ),
+                )
+            ).resolve(),
         )
 
 
