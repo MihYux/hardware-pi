@@ -65,7 +65,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="ReHoYo Hardware Pi Control Plane",
-    version="0.3.0",
+    version="0.3.1",
     lifespan=lifespan,
 )
 app.add_middleware(

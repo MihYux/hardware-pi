@@ -288,18 +288,23 @@ textarea:disabled {
   border: 0;
   outline: 0;
   background: transparent;
-  filter: drop-shadow(0 16px 16px rgb(55 40 79 / 18%));
   cursor: pointer;
+  -webkit-tap-highlight-color: transparent;
+  backface-visibility: hidden;
   transform-origin: 50% 88%;
   animation: pet-idle-float 3.6s ease-in-out infinite;
+  will-change: transform;
 }
 
 .character-button img {
   width: 100%;
   height: 100%;
+  backface-visibility: hidden;
+  filter: drop-shadow(0 16px 16px rgb(55 40 79 / 18%));
   object-fit: contain;
   object-position: center bottom;
   pointer-events: none;
+  transform: translateZ(0);
 }
 
 .expression-soft .character-button {
@@ -307,6 +312,10 @@ textarea:disabled {
 }
 
 .expression-proud .character-button {
+  filter: none;
+}
+
+.expression-proud .character-button img {
   filter:
     drop-shadow(0 16px 16px rgb(55 40 79 / 18%))
     drop-shadow(0 0 10px rgb(234 90 151 / 24%));
@@ -1801,6 +1810,27 @@ textarea:disabled {
   }
   50% {
     transform: translate3d(0, -6px, 0) rotate(0.25deg);
+  }
+}
+
+/*
+ * Mobile and low-power ARM Chromium can drop a large transparent layer when
+ * CSS filter rasterization and an infinite transform animation are rebuilt
+ * together after a tap. Keep the phone/Pi path on a stable, unfiltered layer.
+ */
+@media (max-width: 700px), (hover: none), (pointer: coarse) {
+  .character-button,
+  .expression-soft .character-button {
+    animation: none;
+    transform: none;
+    will-change: auto;
+  }
+
+  .character-button img,
+  .expression-proud .character-button img {
+    backface-visibility: visible;
+    filter: none;
+    transform: none;
   }
 }
 

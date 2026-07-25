@@ -335,6 +335,7 @@ export default function App() {
           <section className="pet-stage">
             <button
               className="character-button"
+              type="button"
               aria-label="和三月七打招呼"
               onClick={surpriseMe}
             >
@@ -444,6 +445,7 @@ export default function App() {
             <div className="nav-pet-slot">
               <button
                 className="nav-character"
+                type="button"
                 aria-label="和三月七打招呼"
                 onClick={surpriseMe}
               >
