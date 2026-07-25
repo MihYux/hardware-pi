@@ -1,6 +1,35 @@
 # ReHoYo Hardware Pi
 
-ReHoYo Hardware Pi 是从三月七 Electron 桌宠迁移出来的局域网陪伴终端。Orange Pi 负责模型调用、密钥、会话和角色规则；手机浏览器作为人物显示器和对话界面。
+> [!IMPORTANT]
+> 本仓库是面向 Orange Pi 的专用版本，不是 [ReHoYo 正式桌面版](https://github.com/MihYux/ReHoYo) 的 ARM 安装包，也不追求逐项复制 Electron 界面。Pi 负责持续运行陪伴服务和统一管理 API，手机浏览器负责显示人物与对话；只对桌面窗口有意义的能力会永久移除。
+
+ReHoYo Hardware Pi 是从 ReHoYo 三月七 Electron 桌宠迁移出来的局域网陪伴终端，适合嵌入更大的硬件或 Python 项目。Orange Pi 负责模型调用、密钥、会话和角色规则；手机浏览器作为人物显示器和对话界面。
+
+## 与正式桌面版的主要变化
+
+| 项目 | ReHoYo 正式桌面版 | Hardware Pi 专用版 |
+| --- | --- | --- |
+| 产品定位 | 全球发行工作台 + Electron 三月七桌宠 | 无头陪伴服务 + 手机人物显示器 + 统一 API 控制面板 |
+| 运行方式 | 在 macOS / Windows / Linux 桌面启动 Electron | 在 Orange Pi 上常驻 FastAPI，手机安装或打开 PWA |
+| 交互入口 | 透明置顶桌宠窗口和桌面主面板 | 手机浏览器中的全屏人物、聊天和管理界面 |
+| 应用通信 | Electron IPC 和本机文件桥接 | 局域网 HTTP、WebSocket 和 OpenAI 兼容 Gateway |
+| API 配置 | 工作台与桌宠分别读取配置 | DeepSeek、智谱 GLM、CosyVoice 在 Pi 上统一配置，其他项目只连接 Pi |
+| 数据保存 | Electron `userData` 中的 JSON 和安全存储 | Pi 数据目录中的受限配置文件与 SQLite |
+| 部署更新 | npm、Electron 打包和桌面安装包 | Docker Compose、SSH 更新和 systemd 自启动 |
+| 硬件集成 | 主要面向桌面操作系统 | 可由更大的 Python 项目通过局域网 API 接入 |
+
+### Pi 版永久移除的桌面功能
+
+以下能力不会进入 Hardware Pi 的迁移待办：
+
+- Electron / Chromium 桌面外壳和 Electron IPC；
+- 透明无边框窗口、置顶、最小化、关闭和托盘隐藏；
+- 鼠标拖动桌宠、四边吸附、窗口位置记忆、窗口缩放和多屏保护；
+- macOS 工作区、全屏空间以及 Windows / Linux 桌面窗口适配；
+- Electron 安装包、代码签名、桌面自动更新和桌面进程看门狗；
+- 在 Pi 中复制 ReHoYo 全球发行工作台界面。正式工作台或更大的项目通过 Gateway 使用 Pi 的模型和陪伴能力。
+
+手机全屏显示、PWA 安装、Docker/systemd 常驻和 SSH 更新分别承担这些能力在硬件场景中的实际职责。上述删除只涉及桌面外壳，不代表删除人物对话、记忆、相册、通信、语音、安全策略或角色发行桥接等陪伴业务能力。
 
 当前版本是迁移第一阶段，已经具备：
 
@@ -131,12 +160,20 @@ DEEPSEEK_BASE_URL=http://orange-pi.local:8000/api/openai/v1
 - 默认只适合可信局域网，不要把端口直接映射到公网；
 - 麦克风和语音阶段会加入局域网 HTTPS。
 
-## 当前未迁移
+## 计划继续迁移
 
 - 长期记忆、相册和通信中心；
+- 首次进入、授权、数据导出和关系控制；
 - CosyVoice 流式语音；
 - 主动联系、勿扰和完整频率策略；
 - ReHoYo 角色发行交付包消费；
-- GPIO、摄像头或其他 Orange Pi 硬件能力。
 
 这些能力会按照迁移计划逐步加入。
+
+## 暂不纳入当前范围
+
+- GPIO、摄像头、传感器和其他具体 Orange Pi 外设；
+- 公网直接访问和多租户云服务；
+- Live2D / Spine 模型。
+
+这些能力不是桌面版迁移的必要条件。后续由上层硬件项目按设备需求通过 API 扩展，避免 Hardware Pi 和某一块开发板或外设过度耦合。

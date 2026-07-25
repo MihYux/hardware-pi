@@ -1,5 +1,7 @@
 # 从 Electron 桌宠迁移到 Hardware Pi
 
+Hardware Pi 是面向 Orange Pi 的专用运行时，不是 ReHoYo 正式桌面版的 ARM 复刻。迁移原则是保留陪伴业务能力，用局域网 API 和手机 PWA 替换桌面交互，并永久删除只对 Electron 窗口有意义的实现。
+
 ## 当前里程碑
 
 第一阶段目标是建立不依赖 Electron 的可运行基础：
@@ -12,7 +14,7 @@
 - SQLite 会话记录；
 - Docker 与 SSH 部署。
 
-## Electron 能力映射
+## 能力保留与替换
 
 | 原 IPC | Hardware Pi |
 | --- | --- |
@@ -24,7 +26,19 @@
 | `companion:*memory*` | 后续迁移为 `/api/v1/memories` |
 | `companion:*message*` | 后续迁移为 `/api/v1/communications` |
 | `tts:*` | 后续迁移为 `/api/v1/tts` 与音频流 |
-| `window:*` | 浏览器/PWA 中移除 |
+| `window:*` | 永久移除，由手机 PWA 和系统服务承担显示与常驻职责 |
+
+## 永久移除
+
+以下内容不进入后续里程碑：
+
+- Electron / Chromium 外壳以及 Electron IPC；
+- 透明、无边框、置顶、最小化、关闭和托盘窗口控制；
+- 拖窗、四边吸附、窗口位置与尺寸记忆、多屏和桌面工作区适配；
+- Electron 安装包、代码签名、桌面自动更新与桌面进程看门狗；
+- ReHoYo 全球发行工作台的 Pi 端界面副本。
+
+正式工作台和其他 Python 项目继续作为独立客户端，通过 HTTP、WebSocket、OpenAI 兼容 Gateway 或后续发行桥接连接 Hardware Pi。GPIO、摄像头和传感器也由上层硬件项目按需扩展，不作为桌面版迁移内容。
 
 ## 后续阶段
 
@@ -58,5 +72,5 @@
 - API 用量与预算；
 - 审计日志；
 - GitHub Actions ARM64 镜像；
-- 自动更新与回滚；
+- 容器更新与版本回滚；
 - 局域网 HTTPS 和设备配对码。
