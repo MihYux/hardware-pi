@@ -31,7 +31,7 @@ Content-Type: application/json
     "deepseek": {
       "enabled": true,
       "base_url": "https://api.deepseek.com",
-      "model": "deepseek-chat",
+      "model": "deepseek-v4-flash",
       "api_key": "..."
     }
   },
@@ -73,6 +73,14 @@ WS /api/v1/chat/ws?token=<device-token>
 已完成首次进入且开启个性化时，服务端会把玩家称呼加入角色上下文；只有同时满足“长期记忆已开启”“玩家已确认”“允许角色引用”的记忆才会加入模型上下文。暂停同行会立即停止个性化和记忆引用。
 
 ## CosyVoice 语音
+
+CosyVoice 使用三项独立配置：
+
+- 模型 ID：`cosyvoice-v3.5-flash`
+- 复刻音色 ID：`cosyvoice-v3.5-flash-marchpet-eb86bcaeea5f40669b1798191950529a`
+- DashScope API Key：保存在 Pi 控制面板，不会返回手机
+
+正式版附带的复刻音色 ID 是否可用取决于当前 DashScope 账号及业务空间权限；若接口提示音色无权访问，请替换为该账号下可用的音色 ID。
 
 读取不含密钥的手机语音设置：
 

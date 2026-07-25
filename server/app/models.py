@@ -68,11 +68,11 @@ class VoiceOutputPatch(BaseModel):
 
 
 class ControlPlaneSettings(BaseModel):
-    schema_version: int = 1
+    schema_version: int = 2
     deepseek: ProviderSettings = Field(
         default_factory=lambda: ProviderSettings(
             base_url="https://api.deepseek.com",
-            model="deepseek-chat",
+            model="deepseek-v4-flash",
         )
     )
     zhipu: ProviderSettings = Field(
@@ -83,7 +83,7 @@ class ControlPlaneSettings(BaseModel):
     )
     cosyvoice: ProviderSettings = Field(
         default_factory=lambda: ProviderSettings(
-            base_url="https://dashscope.aliyuncs.com",
+            base_url="https://dashscope.aliyuncs.com/api/v1",
             model="cosyvoice-v3.5-flash",
         )
     )

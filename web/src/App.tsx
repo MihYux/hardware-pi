@@ -900,7 +900,7 @@ function VoicePanel({
               />
             </label>
             <label>
-              <span>模型</span>
+              <span>CosyVoice 模型 ID</span>
               <input
                 value={provider.model}
                 onChange={(event) =>
@@ -909,7 +909,7 @@ function VoicePanel({
               />
             </label>
             <label className="voice-field-wide">
-              <span>更新 DashScope API Key</span>
+              <span>DashScope API Key</span>
               <input
                 type="password"
                 autoComplete="off"
@@ -1242,7 +1242,7 @@ function ControlPanel({
                 />
               </label>
               <label>
-                <span>模型</span>
+                <span>{name === "cosyvoice" ? "CosyVoice 模型 ID" : "模型 ID"}</span>
                 <input
                   value={provider.model}
                   onChange={(event) =>

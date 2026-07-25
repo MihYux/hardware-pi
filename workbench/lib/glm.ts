@@ -27,7 +27,7 @@ export function aiConfiguration() {
       provider,
       label: process.env.HARDWARE_PI_GATEWAY === "1" ? "Pi 统一路由" : "DeepSeek",
       configured: Boolean(process.env.DEEPSEEK_API_KEY),
-      model: process.env.DEEPSEEK_MODEL || "deepseek-chat",
+      model: process.env.DEEPSEEK_MODEL || "deepseek-v4-flash",
       baseUrl: cleanBaseUrl(process.env.DEEPSEEK_BASE_URL || "https://api.deepseek.com"),
       apiKey: process.env.DEEPSEEK_API_KEY || "",
     };

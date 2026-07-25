@@ -46,10 +46,29 @@ class SettingsStore:
         settings.cosyvoice.model = os.getenv(
             "COSYVOICE_MODEL", settings.cosyvoice.model
         )
+        settings.cosyvoice.base_url = os.getenv(
+            "COSYVOICE_BASE_URL", settings.cosyvoice.base_url
+        ).rstrip("/")
         settings.voice.voice_id = os.getenv(
             "COSYVOICE_VOICE_ID", settings.voice.voice_id
         )
         return settings
+
+    @staticmethod
+    def _migrate(settings: ControlPlaneSettings) -> bool:
+        if settings.schema_version >= 2:
+            return False
+        if settings.deepseek.model == "deepseek-chat":
+            settings.deepseek.model = "deepseek-v4-flash"
+        if (
+            settings.cosyvoice.base_url.rstrip("/")
+            == "https://dashscope.aliyuncs.com"
+        ):
+            settings.cosyvoice.base_url = (
+                "https://dashscope.aliyuncs.com/api/v1"
+            )
+        settings.schema_version = 2
+        return True
 
     def _merge_missing_environment(
         self, settings: ControlPlaneSettings
@@ -76,7 +95,10 @@ class SettingsStore:
             settings = ControlPlaneSettings.model_validate_json(
                 self.path.read_text(encoding="utf-8")
             )
+            changed = self._migrate(settings)
             if self._merge_missing_environment(settings):
+                changed = True
+            if changed:
                 self.save(settings)
             return settings
 

@@ -84,6 +84,7 @@ def test_non_streaming_synthesis_keeps_key_on_server(tmp_path: Path):
     post = requests[0]
     assert post.headers["authorization"] == "Bearer sk-dashscope-test"
     body = json.loads(post.content)
+    assert body["model"] == "cosyvoice-v3.5-flash"
     assert body["input"]["format"] == "wav"
     assert body["input"]["voice"].endswith("test-voice")
 

@@ -88,6 +88,15 @@ describe("chatJson repair", () => {
     expect(glmConfiguration()).toMatchObject({ provider: "deepseek", label: "DeepSeek", configured: true, model: "deepseek-chat" });
   });
 
+  it("defaults DeepSeek to the official desktop Flash model", () => {
+    process.env.AI_PROVIDER = "deepseek";
+
+    expect(glmConfiguration()).toMatchObject({
+      provider: "deepseek",
+      model: "deepseek-v4-flash",
+    });
+  });
+
   it("keeps web search on the Zhipu endpoint when DeepSeek handles generation", async () => {
     process.env.AI_PROVIDER = "deepseek";
     process.env.DEEPSEEK_API_KEY = "deepseek-test-key";

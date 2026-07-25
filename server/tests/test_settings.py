@@ -3,11 +3,53 @@ from pathlib import Path
 import pytest
 
 from app.models import (
+    ControlPlaneSettings,
     ProviderPatch,
     SettingsPatch,
     VoiceOutputPatch,
 )
 from app.settings_store import SettingsStore
+
+
+def test_defaults_match_official_desktop_models(tmp_path: Path):
+    settings = SettingsStore(tmp_path).load()
+
+    assert settings.schema_version == 2
+    assert settings.deepseek.model == "deepseek-v4-flash"
+    assert settings.cosyvoice.base_url == (
+        "https://dashscope.aliyuncs.com/api/v1"
+    )
+    assert settings.cosyvoice.model == "cosyvoice-v3.5-flash"
+    assert settings.voice.voice_id == (
+        "cosyvoice-v3.5-flash-marchpet-"
+        "eb86bcaeea5f40669b1798191950529a"
+    )
+
+
+def test_v1_default_models_are_migrated_without_losing_secrets(
+    tmp_path: Path,
+):
+    legacy = ControlPlaneSettings()
+    legacy.schema_version = 1
+    legacy.deepseek.model = "deepseek-chat"
+    legacy.deepseek.api_key = "sk-existing-deepseek-key"
+    legacy.cosyvoice.base_url = "https://dashscope.aliyuncs.com"
+    legacy.cosyvoice.api_key = "sk-existing-dashscope-key"
+    tmp_path.mkdir(parents=True, exist_ok=True)
+    (tmp_path / "control-plane.json").write_text(
+        legacy.model_dump_json(indent=2),
+        encoding="utf-8",
+    )
+
+    migrated = SettingsStore(tmp_path).load()
+
+    assert migrated.schema_version == 2
+    assert migrated.deepseek.model == "deepseek-v4-flash"
+    assert migrated.deepseek.api_key == "sk-existing-deepseek-key"
+    assert migrated.cosyvoice.base_url == (
+        "https://dashscope.aliyuncs.com/api/v1"
+    )
+    assert migrated.cosyvoice.api_key == "sk-existing-dashscope-key"
 
 
 def test_settings_mask_and_preserve_secret(tmp_path: Path):

@@ -1,4 +1,4 @@
-const CACHE_NAME = "rehoyo-hardware-pi-v8";
+const CACHE_NAME = "rehoyo-hardware-pi-v9";
 const APP_SHELL = ["/", "/manifest.webmanifest", "/assets/march7th-pet.png"];
 
 self.addEventListener("install", (event) => {
