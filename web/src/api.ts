@@ -12,6 +12,22 @@ import type {
 const DEVICE_TOKEN_KEY = "rehoyo.hardwarePi.deviceToken";
 const ADMIN_TOKEN_KEY = "rehoyo.hardwarePi.adminToken";
 const SESSION_KEY = "rehoyo.hardwarePi.sessionId";
+const LOCAL_REQUEST_TIMEOUT_MS = 8_000;
+
+export class ApiRequestError extends Error {
+  constructor(
+    message: string,
+    public status = 0,
+  ) {
+    super(message);
+    this.name = "ApiRequestError";
+  }
+}
+
+export function isAuthenticationError(error: unknown) {
+  return error instanceof ApiRequestError &&
+    (error.status === 401 || error.status === 403);
+}
 
 export function deviceToken() {
   return localStorage.getItem(DEVICE_TOKEN_KEY) || "";
@@ -37,9 +53,37 @@ export function sessionId() {
 async function parseResponse<T>(response: Response): Promise<T> {
   const payload = await response.json().catch(() => ({}));
   if (!response.ok) {
-    throw new Error(payload.message || payload.detail || "请求失败");
+    throw new ApiRequestError(
+      payload.message || payload.detail || "请求失败",
+      response.status,
+    );
   }
   return payload as T;
+}
+
+async function localFetch(
+  input: RequestInfo | URL,
+  init: RequestInit = {},
+): Promise<Response> {
+  const controller = new AbortController();
+  const timer = window.setTimeout(
+    () => controller.abort(),
+    LOCAL_REQUEST_TIMEOUT_MS,
+  );
+  try {
+    return await fetch(input, { ...init, signal: controller.signal });
+  } catch (error) {
+    if ((error as Error).name === "AbortError") {
+      throw new ApiRequestError(
+        "连接 Orange Pi 超时，请确认 Pi 服务仍在运行。",
+      );
+    }
+    throw new ApiRequestError(
+      "无法连接 Orange Pi，请检查网络、地址和服务状态。",
+    );
+  } finally {
+    window.clearTimeout(timer);
+  }
 }
 
 export async function fetchServiceInfo(): Promise<{
@@ -49,12 +93,12 @@ export async function fetchServiceInfo(): Promise<{
     workbench: { port: number };
   };
 }> {
-  const response = await fetch("/api/v1/health");
+  const response = await localFetch("/api/v1/health");
   return parseResponse(response);
 }
 
 export async function fetchHistory(): Promise<ChatMessage[]> {
-  const response = await fetch(`/api/v1/conversations/${encodeURIComponent(sessionId())}`, {
+  const response = await localFetch(`/api/v1/conversations/${encodeURIComponent(sessionId())}`, {
     headers: { Authorization: `Bearer ${deviceToken()}` },
   });
   const payload = await parseResponse<{ messages: ChatMessage[] }>(response);
@@ -84,7 +128,7 @@ export async function sendChat(
 }
 
 export async function fetchControlSettings(): Promise<ControlSettings> {
-  const response = await fetch("/api/v1/control/settings", {
+  const response = await localFetch("/api/v1/control/settings", {
     headers: { "X-Admin-Token": adminToken() },
   });
   return parseResponse<ControlSettings>(response);
@@ -116,7 +160,7 @@ export async function testProvider(provider: "deepseek" | "zhipu" | "cosyvoice")
 }
 
 export async function fetchVoiceSettings(): Promise<VoiceSettings> {
-  const response = await fetch("/api/v1/tts/settings", {
+  const response = await localFetch("/api/v1/tts/settings", {
     headers: { Authorization: `Bearer ${deviceToken()}` },
   });
   return parseResponse<VoiceSettings>(response);
@@ -150,7 +194,7 @@ function deviceHeaders(json = false): HeadersInit {
 }
 
 export async function fetchCompanionSnapshot(): Promise<CompanionSnapshot> {
-  const response = await fetch("/api/v1/companion/snapshot", {
+  const response = await localFetch("/api/v1/companion/snapshot", {
     headers: deviceHeaders(),
   });
   return parseResponse<CompanionSnapshot>(response);

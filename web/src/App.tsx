@@ -18,6 +18,7 @@ import {
 } from "@phosphor-icons/react";
 import {
   adminToken,
+  isAuthenticationError,
   createMemory,
   deviceToken,
   fetchCompanionSnapshot,
@@ -55,6 +56,14 @@ type PanelTab =
   | "voice"
   | "control";
 
+type ConnectionState =
+  | "ready"
+  | "connecting"
+  | "unpaired"
+  | "device-unauthorized"
+  | "admin-unauthorized"
+  | "offline";
+
 const expressionCopy: Record<Expression, string> = {
   bright: "元气满满",
   soft: "认真陪伴",
@@ -83,15 +92,17 @@ export default function App() {
   const [device, setDevice] = useState(deviceToken());
   const [activeDevice, setActiveDevice] = useState(deviceToken());
   const [admin, setAdmin] = useState(adminToken());
+  const [activeAdmin, setActiveAdmin] = useState(adminToken());
+  const [connectionAttempt, setConnectionAttempt] = useState(0);
   const [messages, setMessages] = useState<ChatMessage[]>([welcome]);
   const [snapshot, setSnapshot] = useState<CompanionSnapshot | null>(null);
   const [expression, setExpression] = useState<Expression>("bright");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
-  const [connection, setConnection] = useState<
-    "ready" | "offline" | "unauthorized"
-  >(device ? "offline" : "unauthorized");
+  const [connection, setConnection] = useState<ConnectionState>(
+    device ? "connecting" : "unpaired",
+  );
   const [notice, setNotice] = useState("");
   const [workbenchPort, setWorkbenchPort] = useState(3000);
   const [voiceSettings, setVoiceSettings] = useState<VoiceSettings | null>(
@@ -115,21 +126,75 @@ export default function App() {
   }, []);
 
   useEffect(() => {
-    if (!deviceToken()) return;
-    void Promise.all([fetchHistory(), fetchCompanionSnapshot()])
-      .then(([history, companion]) => {
+    let cancelled = false;
+    if (!activeDevice) {
+      setSnapshot(null);
+      setVoiceSettings(null);
+      setConnection("unpaired");
+      return;
+    }
+
+    setConnection("connecting");
+    setNotice("正在验证设备令牌和管理令牌…");
+    void (async () => {
+      try {
+        const [history, companion] = await Promise.all([
+          fetchHistory(),
+          fetchCompanionSnapshot(),
+        ]);
+        if (cancelled) return;
         if (history.length) setMessages(history);
         setSnapshot(companion);
-        setConnection("ready");
-      })
-      .catch(() => {
+      } catch (error) {
+        if (cancelled) return;
         setSnapshot(null);
-        setConnection("unauthorized");
-      });
-    void fetchVoiceSettings()
-      .then(setVoiceSettings)
-      .catch(() => setVoiceSettings(null));
-  }, [activeDevice]);
+        setVoiceSettings(null);
+        if (isAuthenticationError(error)) {
+          setConnection("device-unauthorized");
+          setNotice("设备令牌无效，请重新复制 HARDWARE_PI_DEVICE_TOKEN。");
+        } else {
+          setConnection("offline");
+          setNotice((error as Error).message);
+        }
+        return;
+      }
+
+      void fetchVoiceSettings()
+        .then((next) => {
+          if (!cancelled) setVoiceSettings(next);
+        })
+        .catch(() => {
+          if (!cancelled) setVoiceSettings(null);
+        });
+
+      if (!activeAdmin) {
+        setConnection("ready");
+        setNotice("设备已连接；填写管理令牌后可使用统一 API 设置。");
+        return;
+      }
+      try {
+        await fetchControlSettings();
+        if (cancelled) return;
+        setConnection("ready");
+        setNotice("");
+      } catch (error) {
+        if (cancelled) return;
+        if (isAuthenticationError(error)) {
+          setConnection("admin-unauthorized");
+          setNotice(
+            "设备已连接，但管理令牌无效；请重新复制 HARDWARE_PI_ADMIN_TOKEN。",
+          );
+        } else {
+          setConnection("offline");
+          setNotice((error as Error).message);
+        }
+      }
+    })();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [activeAdmin, activeDevice, connectionAttempt]);
 
   useEffect(
     () => () => voicePlayer.current?.stop(false),
@@ -144,8 +209,11 @@ export default function App() {
     [...messages].reverse().find((message) => message.role === "assistant")
       ?.content ?? idleLines[0];
   const statusText = useMemo(() => {
-    if (connection === "unauthorized") return "等待连接 Pi";
-    if (connection === "offline") return "正在连接";
+    if (connection === "unpaired") return "等待连接 Pi";
+    if (connection === "connecting") return "正在连接";
+    if (connection === "device-unauthorized") return "设备令牌无效";
+    if (connection === "admin-unauthorized") return "管理令牌无效";
+    if (connection === "offline") return "Pi 无响应";
     if (snapshot?.profile.paused) return "同行已暂停";
     if (snapshot?.counts.unread_communications) {
       return `${snapshot.counts.unread_communications} 封新通信`;
@@ -159,11 +227,23 @@ export default function App() {
     )?.showModal();
   }
 
-  function persistTokens() {
-    saveTokens(device, admin);
-    setActiveDevice(device.trim());
-    setConnection(device.trim() ? "offline" : "unauthorized");
-    setNotice("访问令牌已保存在当前浏览器");
+  function persistTokens(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const nextDevice = device.trim();
+    const nextAdmin = admin.trim();
+    saveTokens(nextDevice, nextAdmin);
+    setActiveDevice(nextDevice);
+    setActiveAdmin(nextAdmin);
+    setConnection(nextDevice ? "connecting" : "unpaired");
+    setConnectionAttempt((value) => value + 1);
+    setNotice(
+      nextDevice
+        ? "正在验证设备令牌和管理令牌…"
+        : "请填写 HARDWARE_PI_DEVICE_TOKEN。",
+    );
+    (
+      document.getElementById("pairing") as HTMLDialogElement | null
+    )?.close();
   }
 
   function openPanel(tab: PanelTab) {
@@ -564,7 +644,7 @@ export default function App() {
                 draft={draft}
                 busy={busy}
                 notice={notice}
-                connected={Boolean(deviceToken())}
+                connected={Boolean(snapshot)}
                 messageEnd={messageEnd}
                 onDraft={setDraft}
                 onSubmit={submit}
@@ -574,7 +654,7 @@ export default function App() {
               />
             ) : panelTab === "voice" ? (
               <VoicePanel
-                adminTokenValue={admin}
+                adminTokenValue={activeAdmin}
                 onNeedPairing={openPairing}
                 onUpdated={refreshVoiceSettings}
               />
@@ -596,7 +676,7 @@ export default function App() {
               />
             ) : (
               <ControlPanel
-                adminTokenValue={admin}
+                adminTokenValue={activeAdmin}
                 onNeedPairing={openPairing}
               />
             )}
@@ -619,13 +699,26 @@ export default function App() {
       ) : null}
 
       <dialog id="pairing" className="pairing-dialog">
-        <form method="dialog">
+        <form onSubmit={persistTokens}>
           <div className="dialog-heading">
             <div>
               <span className="eyebrow">LOCAL PAIRING</span>
               <h2>连接 Orange Pi</h2>
             </div>
-            <button className="dialog-close" aria-label="关闭">×</button>
+            <button
+              className="dialog-close"
+              type="button"
+              aria-label="关闭"
+              onClick={() =>
+                (
+                  document.getElementById(
+                    "pairing",
+                  ) as HTMLDialogElement | null
+                )?.close()
+              }
+            >
+              ×
+            </button>
           </div>
           <label>
             <span>设备令牌</span>
@@ -645,9 +738,16 @@ export default function App() {
               placeholder="HARDWARE_PI_ADMIN_TOKEN"
             />
           </label>
-          <p>令牌只保存在当前浏览器；模型 API Key 始终留在 Pi。</p>
-          <button className="primary-action" onClick={persistTokens}>
-            保存并连接
+          <p>
+            令牌只保存在当前浏览器；保存后会分别验证设备接口和管理接口。
+            模型 API Key 始终留在 Pi。
+          </p>
+          <button
+            className="primary-action"
+            type="submit"
+            disabled={!device.trim()}
+          >
+            {connection === "connecting" ? "重新验证" : "保存并连接"}
           </button>
         </form>
       </dialog>
