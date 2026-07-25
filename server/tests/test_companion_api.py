@@ -96,3 +96,51 @@ def test_workbench_search_uses_control_plane_route(monkeypatch):
             ]
     finally:
         main.app.dependency_overrides.clear()
+
+
+def test_v4_import_api_requires_explicit_confirmation(
+    tmp_path: Path,
+    monkeypatch,
+):
+    companion = CompanionStore(tmp_path)
+    monkeypatch.setattr(main, "companion_store", companion)
+    monkeypatch.setattr(main, "conversation_store", ConversationStore(tmp_path))
+    monkeypatch.setattr(main, "settings_store", SettingsStore(tmp_path))
+    main.app.dependency_overrides[require_device] = lambda: None
+    payload = {
+        "schemaVersion": 4,
+        "memories": [
+            {
+                "id": "memory-api-import",
+                "type": "photo",
+                "title": "API 导入记忆",
+                "summary": "来自正式桌面版记忆导出的记录。",
+                "createdAt": "2026-07-02T00:00:00.000Z",
+                "reusableByCharacter": True,
+                "userConfirmed": True,
+            }
+        ],
+    }
+
+    try:
+        with TestClient(main.app) as client:
+            rejected = client.post(
+                "/api/v1/companion/import",
+                json={
+                    "accepted_data_import": False,
+                    "payload": payload,
+                },
+            )
+            imported = client.post(
+                "/api/v1/companion/import",
+                json={
+                    "accepted_data_import": True,
+                    "payload": payload,
+                },
+            )
+
+        assert rejected.status_code == 400
+        assert imported.status_code == 200
+        assert imported.json()["imported"]["memories"] == 1
+    finally:
+        main.app.dependency_overrides.clear()

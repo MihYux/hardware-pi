@@ -25,6 +25,7 @@ import {
   deleteCompanionData,
   deleteMemory,
   exportCompanionData,
+  importCompanionData,
   scanReleaseQueue,
   updateCommunication,
   updateCompanionProfile,
@@ -774,6 +775,7 @@ export function RelationshipPage({
   const [profile, setProfile] = useState(snapshot.profile);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
+  const importInput = useRef<HTMLInputElement>(null);
 
   useEffect(() => setProfile(snapshot.profile), [snapshot.profile]);
 
@@ -829,6 +831,37 @@ export function RelationshipPage({
       setNotice((error as Error).message);
     } finally {
       setBusy("");
+    }
+  }
+
+  async function importLegacy(file: File | undefined) {
+    if (!file) return;
+    if (file.size > 5 * 1024 * 1024) {
+      setNotice("导入文件不能超过 5 MB");
+      return;
+    }
+    if (
+      !window.confirm(
+        "将正式桌面版 v4 导出合并到当前 Pi。不会导入 API Key、自由聊天、Campaign 后台数据或执行日志；同一记录不会重复写入。继续吗？",
+      )
+    ) {
+      if (importInput.current) importInput.current.value = "";
+      return;
+    }
+    setBusy("import");
+    setNotice("");
+    try {
+      const payload = JSON.parse(await file.text());
+      const result = await importCompanionData(payload);
+      await onRefresh();
+      setNotice(
+        `导入完成：记忆 ${result.imported.memories} 条，通信 ${result.imported.communications} 条`,
+      );
+    } catch (error) {
+      setNotice((error as Error).message);
+    } finally {
+      setBusy("");
+      if (importInput.current) importInput.current.value = "";
     }
   }
 
@@ -972,6 +1005,23 @@ export function RelationshipPage({
           <strong>数据管理</strong>
           <p>导出不包含 API Key；删除后无法恢复，但不会删除模型配置。</p>
           <div>
+            <input
+              ref={importInput}
+              className="legacy-import-input"
+              type="file"
+              accept="application/json,.json"
+              onChange={(event) =>
+                void importLegacy(event.target.files?.[0])
+              }
+            />
+            <button
+              type="button"
+              disabled={Boolean(busy)}
+              onClick={() => importInput.current?.click()}
+            >
+              <Database />
+              {busy === "import" ? "导入中" : "导入正式版 v4"}
+            </button>
             <button type="button" onClick={() => void downloadExport()}>
               <DownloadSimple />
               导出数据

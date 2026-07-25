@@ -1694,6 +1694,7 @@ textarea:disabled {
 
 .companion-danger-zone > div {
   display: flex;
+  flex-wrap: wrap;
   gap: 7px;
 }
 
@@ -1710,6 +1711,10 @@ textarea:disabled {
   background: #ffe3ea;
   cursor: pointer;
   font-size: 8px;
+}
+
+.legacy-import-input {
+  display: none;
 }
 
 .companion-danger-zone button:last-child {

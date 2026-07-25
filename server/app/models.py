@@ -207,6 +207,10 @@ class CompanionPreferences(BaseModel):
         default_factory=lambda: ["daily", "photo", "postcard", "relationship"],
         max_length=8,
     )
+    reduced_content_types: list[ContentType] = Field(
+        default_factory=list,
+        max_length=8,
+    )
     proactive_contact_enabled: bool = False
     recall_enabled: bool = False
     personalization_enabled: bool = True
@@ -231,6 +235,10 @@ class CompanionProfilePatch(BaseModel):
         default=None,
         max_length=8,
     )
+    reduced_content_types: list[ContentType] | None = Field(
+        default=None,
+        max_length=8,
+    )
     proactive_contact_enabled: bool | None = None
     recall_enabled: bool | None = None
     personalization_enabled: bool | None = None
@@ -238,6 +246,7 @@ class CompanionProfilePatch(BaseModel):
     quiet_hours: QuietHours | None = None
     weekly_contact_limit: int | None = Field(default=None, ge=0, le=7)
     paused: bool | None = None
+    quiet_until: datetime | None = None
 
 
 class MemoryCreate(BaseModel):

@@ -100,3 +100,154 @@ def test_communication_state_and_relationship_data_reset(tmp_path: Path):
     assert reset["profile"]["onboarding_completed"] is False
     assert reset["counts"]["memories"] == 0
     assert reset["counts"]["communications"] == 0
+
+
+def test_official_v4_import_is_safe_idempotent_and_consent_aware(
+    tmp_path: Path,
+):
+    store = CompanionStore(tmp_path)
+    store.initialize()
+    payload = {
+        "schemaVersion": 4,
+        "scope": "rehoyo-companion-local-data",
+        "data": {
+            "schemaVersion": 4,
+            "profile": {
+                "displayName": "旧版开拓者",
+                "region": "japan",
+                "language": "zh-CN",
+                "timeZone": "Asia/Tokyo",
+                "allowedContentTypes": [
+                    "daily",
+                    "relationship",
+                    "version_launch",
+                ],
+                "reducedContentTypes": ["version_launch"],
+                "proactiveContactEnabled": True,
+                "recallEnabled": False,
+                "personalizationEnabled": True,
+                "memoryEnabled": True,
+                "quietHours": {"start": "23:00", "end": "08:00"},
+                "weeklyContactLimit": 3,
+                "onboardingCompleted": True,
+                "consentVersion": "rehoyo-companion-consent-v1",
+            },
+            "relationship": {
+                "joinedAt": "2026-07-01T00:00:00.000Z",
+                "paused": False,
+                "quietUntil": "2026-08-01T00:00:00.000Z",
+            },
+            "memories": [
+                {
+                    "id": "memory-confirmed",
+                    "type": "photo",
+                    "title": "旧版共同照片",
+                    "summary": "玩家明确确认保存的一次拍照记忆。",
+                    "characterText": "咱把这张照片收好啦！",
+                    "createdAt": "2026-07-02T00:00:00.000Z",
+                    "reusableByCharacter": True,
+                    "userConfirmed": True,
+                    "status": "confirmed",
+                },
+                {
+                    "id": "memory-candidate",
+                    "type": "choice",
+                    "title": "等待确认的同行选择",
+                    "summary": "这条记录仍需要玩家确认。",
+                    "characterText": "",
+                    "createdAt": "2026-07-03T00:00:00.000Z",
+                    "reusableByCharacter": True,
+                    "userConfirmed": False,
+                    "origin": "explicit",
+                },
+                {
+                    "id": "memory-hidden",
+                    "type": "choice",
+                    "title": "自动提取记录",
+                    "summary": "未确认的隐藏记录不应进入 Pi。",
+                    "createdAt": "2026-07-04T00:00:00.000Z",
+                    "userConfirmed": False,
+                    "origin": "automatic",
+                    "hidden": True,
+                },
+            ],
+            "messages": [
+                {
+                    "id": "message-approved",
+                    "characterId": "march-7th",
+                    "playerId": "player",
+                    "type": "version_launch",
+                    "title": "旧版已审核通信",
+                    "body": "开拓者，咱们又有新的旅行故事啦。",
+                    "createdAt": "2026-07-05T00:00:00.000Z",
+                    "eventId": "event-public",
+                    "reviewStatus": "approved",
+                    "sentAt": "2026-07-05T00:00:00.000Z",
+                    "deliveryMode": "proactive",
+                    "readAt": None,
+                    "favorite": True,
+                    "liked": False,
+                    "remindLater": False,
+                    "trace": {"templateId": "template-public"},
+                },
+                {
+                    "id": "message-draft",
+                    "characterId": "march-7th",
+                    "playerId": "player",
+                    "type": "daily",
+                    "title": "未审核草稿",
+                    "body": "这条不能显示。",
+                    "createdAt": "2026-07-05T00:00:00.000Z",
+                    "eventId": "event-draft",
+                    "reviewStatus": "draft",
+                },
+            ],
+        },
+    }
+
+    first = store.import_v4(payload)
+    second = store.import_v4(payload)
+
+    assert first["imported"] == {
+        "profile": True,
+        "memories": 2,
+        "communications": 1,
+        "skipped_memories": 1,
+        "skipped_communications": 1,
+    }
+    assert second["imported"]["memories"] == 0
+    assert second["imported"]["communications"] == 0
+    profile = store.profile()
+    assert profile["display_name"] == "旧版开拓者"
+    assert profile["reduced_content_types"] == ["version_launch"]
+    assert profile["quiet_until"].startswith("2026-08-01")
+    assert len(store.memories()) == 2
+    assert sum(item["user_confirmed"] for item in store.memories()) == 1
+    assert "等待确认的同行选择" not in store.prompt_context()
+    assert store.communications()[0]["delivery_mode"] == "proactive"
+
+
+def test_v4_memory_only_export_is_supported(tmp_path: Path):
+    store = CompanionStore(tmp_path)
+    store.initialize()
+
+    result = store.import_v4(
+        {
+            "schemaVersion": 4,
+            "characterId": "march-7th",
+            "memories": [
+                {
+                    "id": "memory-export-only",
+                    "type": "photo",
+                    "title": "只导出的相册记录",
+                    "summary": "来自正式版的记忆专用导出。",
+                    "createdAt": "2026-07-02T00:00:00.000Z",
+                    "reusableByCharacter": True,
+                    "userConfirmed": True,
+                }
+            ],
+        }
+    )
+
+    assert result["imported"]["profile"] is False
+    assert result["imported"]["memories"] == 1

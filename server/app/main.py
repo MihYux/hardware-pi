@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import json
 import time
 from contextlib import asynccontextmanager
 from pathlib import Path
@@ -112,7 +113,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="ReHoYo Hardware Pi Control Plane",
-    version="0.5.0",
+    version="0.6.0",
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -283,6 +284,29 @@ async def export_companion_data(_: None = Depends(require_device)):
 @app.delete("/api/v1/companion/data")
 async def delete_companion_data(_: None = Depends(require_device)):
     return companion_store.delete_all()
+
+
+@app.post("/api/v1/companion/import")
+async def import_companion_data(
+    request: Request,
+    _: None = Depends(require_device),
+):
+    raw = await request.body()
+    if len(raw) > 8 * 1024 * 1024:
+        raise HTTPException(status_code=413, detail="导入文件不能超过 8 MB。")
+    try:
+        body = json.loads(raw)
+    except (UnicodeDecodeError, json.JSONDecodeError) as error:
+        raise ValueError("导入文件不是有效的 JSON。") from error
+    if (
+        not isinstance(body, dict)
+        or body.get("accepted_data_import") is not True
+    ):
+        raise ValueError("导入前必须确认数据合并说明。")
+    payload = body.get("payload")
+    if not isinstance(payload, dict):
+        raise ValueError("导入请求缺少正式版导出数据。")
+    return companion_store.import_v4(payload)
 
 
 @app.post("/api/v1/memories", status_code=201)

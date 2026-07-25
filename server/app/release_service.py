@@ -223,6 +223,11 @@ class ReleaseService:
                 example_frequency_bypass=bool(
                     delivery.get("exampleMode")
                 ),
+                quiet_until=profile.get("quiet_until"),
+                reduced_content_types=profile.get(
+                    "reduced_content_types",
+                    [],
+                ),
             )
             if not policy["allowed"]:
                 self.companion_store.defer_release_delivery(

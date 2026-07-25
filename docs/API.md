@@ -261,6 +261,25 @@ Authorization: Bearer <device-token>
 
 导出资料、记忆和通信，不包含 API Key 和自由聊天记录。
 
+合并正式桌面版 v4 隐私导出或记忆导出：
+
+```http
+POST /api/v1/companion/import
+Authorization: Bearer <device-token>
+Content-Type: application/json
+
+{
+  "accepted_data_import": true,
+  "payload": {
+    "schemaVersion": 4,
+    "scope": "rehoyo-companion-local-data",
+    "data": {}
+  }
+}
+```
+
+请求上限 8 MB。导入不会清空 Pi 现有数据；原记录 ID 会转换为稳定的 `legacy-v4-*` ID，因此可安全重试。同行资料只在正式版已完成首次授权时合并；隐藏自动候选不会导入，未确认的显式候选不会提供给模型；通信必须同时具有 `reviewStatus=approved` 与 `sentAt`。
+
 ```http
 DELETE /api/v1/companion/data
 Authorization: Bearer <device-token>

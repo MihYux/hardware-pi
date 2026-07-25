@@ -74,6 +74,7 @@ export type CompanionProfile = {
   language: string;
   time_zone: string;
   allowed_content_types: ContentType[];
+  reduced_content_types: ContentType[];
   proactive_contact_enabled: boolean;
   recall_enabled: boolean;
   personalization_enabled: boolean;
@@ -86,6 +87,7 @@ export type CompanionProfile = {
   onboarding_completed: boolean;
   consent_version: string;
   paused: boolean;
+  quiet_until: string | null;
   joined_at: string | null;
   updated_at: string;
 };

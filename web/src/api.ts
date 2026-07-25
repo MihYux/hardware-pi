@@ -261,3 +261,24 @@ export async function deleteCompanionData(): Promise<CompanionSnapshot> {
   });
   return parseResponse<CompanionSnapshot>(response);
 }
+
+export async function importCompanionData(payload: unknown): Promise<{
+  imported: {
+    profile: boolean;
+    memories: number;
+    communications: number;
+    skipped_memories: number;
+    skipped_communications: number;
+  };
+  snapshot: CompanionSnapshot;
+}> {
+  const response = await fetch("/api/v1/companion/import", {
+    method: "POST",
+    headers: deviceHeaders(true),
+    body: JSON.stringify({
+      accepted_data_import: true,
+      payload,
+    }),
+  });
+  return parseResponse(response);
+}

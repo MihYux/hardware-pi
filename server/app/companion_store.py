@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import hashlib
 import sqlite3
 import threading
 from datetime import datetime, timedelta, timezone
@@ -14,6 +15,7 @@ from .models import (
     MemoryPatch,
     OnboardingRequest,
 )
+from .safety import review_output
 
 
 FIRST_JOIN_CHOICES = {
@@ -38,10 +40,67 @@ FIRST_JOIN_CHOICES = {
         "慢慢走也挺好嘛。重要的不是赶多远，是咱们真的一起走过。",
     ),
 }
+CONTENT_TYPES = {
+    "daily",
+    "photo",
+    "postcard",
+    "relationship",
+    "version_preheat",
+    "version_launch",
+    "version_sustain",
+    "recall",
+}
+MEMORY_TYPES = {
+    "choice",
+    "photo",
+    "postcard",
+    "milestone",
+    "version",
+    "return",
+}
 
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat()
+
+
+def legacy_id(kind: str, value: object) -> str:
+    digest = hashlib.sha256(str(value).encode("utf-8")).hexdigest()[:20]
+    return f"legacy-v4-{kind}-{digest}"
+
+
+def valid_iso(value: object, fallback: str) -> str:
+    if not isinstance(value, str) or len(value) > 40:
+        return fallback
+    try:
+        parsed = datetime.fromisoformat(value.replace("Z", "+00:00"))
+    except ValueError:
+        return fallback
+    if parsed.tzinfo is None:
+        parsed = parsed.replace(tzinfo=timezone.utc)
+    return parsed.astimezone(timezone.utc).isoformat()
+
+
+def bounded_int(
+    value: object,
+    minimum: int,
+    maximum: int,
+    fallback: int,
+) -> int:
+    if isinstance(value, bool):
+        return fallback
+    try:
+        parsed = int(value)
+    except (TypeError, ValueError):
+        return fallback
+    return min(maximum, max(minimum, parsed))
+
+
+def safe_visible(value: object, maximum: int) -> str:
+    clean = str(value or "").strip()[:maximum]
+    if not clean or review_output(clean) != clean:
+        return ""
+    return clean
 
 
 class CompanionStore:
@@ -68,6 +127,7 @@ class CompanionStore:
                     language TEXT NOT NULL,
                     time_zone TEXT NOT NULL,
                     allowed_content_types TEXT NOT NULL,
+                    reduced_content_types TEXT NOT NULL DEFAULT '[]',
                     proactive_contact_enabled INTEGER NOT NULL,
                     recall_enabled INTEGER NOT NULL,
                     personalization_enabled INTEGER NOT NULL,
@@ -78,6 +138,7 @@ class CompanionStore:
                     onboarding_completed INTEGER NOT NULL,
                     consent_version TEXT NOT NULL,
                     paused INTEGER NOT NULL,
+                    quiet_until TEXT,
                     joined_at TEXT,
                     updated_at TEXT NOT NULL
                 );
@@ -146,6 +207,18 @@ class CompanionStore:
             )
             self._ensure_column(
                 connection,
+                "companion_profile",
+                "reduced_content_types",
+                "TEXT NOT NULL DEFAULT '[]'",
+            )
+            self._ensure_column(
+                connection,
+                "companion_profile",
+                "quiet_until",
+                "TEXT",
+            )
+            self._ensure_column(
+                connection,
                 "communications",
                 "delivery_mode",
                 "TEXT NOT NULL DEFAULT 'system'",
@@ -200,15 +273,18 @@ class CompanionStore:
             """
             INSERT OR IGNORE INTO companion_profile(
                 id, display_name, region, language, time_zone,
-                allowed_content_types, proactive_contact_enabled,
+                allowed_content_types, reduced_content_types,
+                proactive_contact_enabled,
                 recall_enabled, personalization_enabled, memory_enabled,
                 quiet_start, quiet_end, weekly_contact_limit,
-                onboarding_completed, consent_version, paused, joined_at,
+                onboarding_completed, consent_version, paused, quiet_until,
+                joined_at,
                 updated_at
             ) VALUES (
                 'primary', '开拓者', 'china', 'zh-CN', 'Asia/Shanghai',
-                '["daily","photo","postcard","relationship"]',
-                0, 0, 1, 1, '22:00', '09:00', 2, 0, '', 0, NULL, ?
+                '["daily","photo","postcard","relationship"]', '[]',
+                0, 0, 1, 1, '22:00', '09:00', 2, 0, '', 0,
+                NULL, NULL, ?
             )
             """,
             (now,),
@@ -236,6 +312,9 @@ class CompanionStore:
             "allowed_content_types": json.loads(
                 row["allowed_content_types"]
             ),
+            "reduced_content_types": json.loads(
+                row["reduced_content_types"]
+            ),
             "proactive_contact_enabled": bool(
                 row["proactive_contact_enabled"]
             ),
@@ -252,6 +331,7 @@ class CompanionStore:
             "onboarding_completed": bool(row["onboarding_completed"]),
             "consent_version": row["consent_version"],
             "paused": bool(row["paused"]),
+            "quiet_until": row["quiet_until"],
             "joined_at": row["joined_at"],
             "updated_at": row["updated_at"],
         }
@@ -401,6 +481,7 @@ class CompanionStore:
                 UPDATE companion_profile SET
                     display_name = ?, region = ?, language = ?,
                     time_zone = ?, allowed_content_types = ?,
+                    reduced_content_types = ?,
                     proactive_contact_enabled = ?, recall_enabled = ?,
                     personalization_enabled = ?, memory_enabled = ?,
                     quiet_start = ?, quiet_end = ?,
@@ -415,6 +496,10 @@ class CompanionStore:
                     request.language,
                     request.time_zone,
                     json.dumps(allowed, ensure_ascii=False),
+                    json.dumps(
+                        request.reduced_content_types,
+                        ensure_ascii=False,
+                    ),
                     int(request.proactive_contact_enabled),
                     int(request.recall_enabled),
                     int(request.personalization_enabled),
@@ -487,6 +572,7 @@ class CompanionStore:
             "memory_enabled": "memory_enabled",
             "weekly_contact_limit": "weekly_contact_limit",
             "paused": "paused",
+            "quiet_until": "quiet_until",
         }
         assignments: list[str] = []
         values: list[object] = []
@@ -496,6 +582,8 @@ class CompanionStore:
             value = update[field]
             if isinstance(value, bool):
                 value = int(value)
+            if isinstance(value, datetime):
+                value = value.astimezone(timezone.utc).isoformat()
             assignments.append(f"{column} = ?")
             values.append(value)
         if "allowed_content_types" in update:
@@ -507,6 +595,12 @@ class CompanionStore:
                 allowed = [item for item in allowed if item != "recall"]
             assignments.append("allowed_content_types = ?")
             values.append(json.dumps(allowed, ensure_ascii=False))
+        if "reduced_content_types" in update:
+            reduced = list(
+                dict.fromkeys(update["reduced_content_types"])
+            )
+            assignments.append("reduced_content_types = ?")
+            values.append(json.dumps(reduced, ensure_ascii=False))
         if "quiet_hours" in update:
             quiet = update["quiet_hours"]
             assignments.extend(["quiet_start = ?", "quiet_end = ?"])
@@ -661,6 +755,284 @@ class CompanionStore:
                 (message_id,),
             ).fetchone()
         return self._communication_dict(row) if row else None
+
+    def import_v4(self, envelope: dict) -> dict:
+        if not isinstance(envelope, dict):
+            raise ValueError("导入文件不是有效的 JSON 对象。")
+        data = (
+            envelope.get("data")
+            if envelope.get("scope") == "rehoyo-companion-local-data"
+            else envelope
+        )
+        if not isinstance(data, dict):
+            raise ValueError("导入文件缺少同行数据。")
+        schema_version = envelope.get(
+            "schemaVersion",
+            data.get("schemaVersion"),
+        )
+        if schema_version != 4:
+            raise ValueError("目前只支持正式桌面版 schemaVersion 4。")
+        profile = data.get("profile")
+        relationship = data.get("relationship")
+        memories = data.get("memories", envelope.get("memories", []))
+        messages = data.get("messages", [])
+        if not isinstance(profile, dict):
+            profile = {}
+        if not isinstance(relationship, dict):
+            relationship = {}
+        if not isinstance(memories, list) or not isinstance(messages, list):
+            raise ValueError("导入文件中的记忆或通信格式无效。")
+
+        now = utc_now()
+        imported = {
+            "profile": False,
+            "memories": 0,
+            "communications": 0,
+            "skipped_memories": 0,
+            "skipped_communications": 0,
+        }
+        with self._lock, self._connect() as connection:
+            self._ensure_profile(connection)
+            if profile and profile.get("onboardingCompleted") is True:
+                region = (
+                    profile.get("region")
+                    if profile.get("region")
+                    in {"china", "japan", "north_america"}
+                    else "china"
+                )
+                time_zone = (
+                    profile.get("timeZone")
+                    if profile.get("timeZone")
+                    in {
+                        "Asia/Shanghai",
+                        "Asia/Tokyo",
+                        "America/Los_Angeles",
+                    }
+                    else "Asia/Shanghai"
+                )
+                allowed = [
+                    item
+                    for item in profile.get("allowedContentTypes", [])
+                    if item in CONTENT_TYPES
+                ]
+                reduced = [
+                    item
+                    for item in profile.get("reducedContentTypes", [])
+                    if item in CONTENT_TYPES
+                ]
+                recall = profile.get("recallEnabled") is True
+                if recall and "recall" not in allowed:
+                    allowed.append("recall")
+                if not recall:
+                    allowed = [item for item in allowed if item != "recall"]
+                quiet = profile.get("quietHours")
+                if not isinstance(quiet, dict):
+                    quiet = {}
+                quiet_start = str(quiet.get("start") or "22:00")[:5]
+                quiet_end = str(quiet.get("end") or "09:00")[:5]
+                display_name = safe_visible(
+                    profile.get("displayName"),
+                    24,
+                ) or "开拓者"
+                joined_at = valid_iso(
+                    relationship.get("joinedAt"),
+                    now,
+                )
+                quiet_until = (
+                    valid_iso(relationship.get("quietUntil"), now)
+                    if relationship.get("quietUntil")
+                    else None
+                )
+                connection.execute(
+                    """
+                    UPDATE companion_profile SET
+                        display_name = ?, region = ?, language = ?,
+                        time_zone = ?, allowed_content_types = ?,
+                        reduced_content_types = ?,
+                        proactive_contact_enabled = ?, recall_enabled = ?,
+                        personalization_enabled = ?, memory_enabled = ?,
+                        quiet_start = ?, quiet_end = ?,
+                        weekly_contact_limit = ?,
+                        onboarding_completed = 1, consent_version = ?,
+                        paused = ?, quiet_until = ?, joined_at = ?,
+                        updated_at = ?
+                    WHERE id = 'primary'
+                    """,
+                    (
+                        display_name,
+                        region,
+                        str(profile.get("language") or "zh-CN")[:24],
+                        time_zone,
+                        json.dumps(allowed, ensure_ascii=False),
+                        json.dumps(reduced, ensure_ascii=False),
+                        int(
+                            profile.get("proactiveContactEnabled")
+                            is True
+                        ),
+                        int(recall),
+                        int(
+                            profile.get("personalizationEnabled")
+                            is not False
+                        ),
+                        int(profile.get("memoryEnabled") is not False),
+                        quiet_start,
+                        quiet_end,
+                        bounded_int(
+                            profile.get("weeklyContactLimit"),
+                            0,
+                            7,
+                            2,
+                        ),
+                        str(
+                            profile.get("consentVersion")
+                            or "rehoyo-companion-consent-v1"
+                        )[:80],
+                        int(relationship.get("paused") is True),
+                        quiet_until,
+                        joined_at,
+                        now,
+                    ),
+                )
+                imported["profile"] = True
+
+            for item in memories[:2_000]:
+                if not isinstance(item, dict):
+                    imported["skipped_memories"] += 1
+                    continue
+                memory_type = item.get("type")
+                source_id = item.get("id")
+                title = safe_visible(item.get("title"), 80)
+                summary = safe_visible(item.get("summary"), 500)
+                if (
+                    memory_type not in MEMORY_TYPES
+                    or not isinstance(source_id, str)
+                    or not source_id
+                    or not title
+                    or not summary
+                ):
+                    imported["skipped_memories"] += 1
+                    continue
+                confirmed = (
+                    item.get("userConfirmed") is True
+                    and item.get("status") not in {"rejected", "deleted"}
+                )
+                if (
+                    not confirmed
+                    and (
+                        item.get("hidden") is True
+                        or item.get("origin") == "automatic"
+                    )
+                ):
+                    imported["skipped_memories"] += 1
+                    continue
+                character_text = safe_visible(
+                    item.get("characterText"),
+                    500,
+                )
+                created_at = valid_iso(item.get("createdAt"), now)
+                cursor = connection.execute(
+                    """
+                    INSERT OR IGNORE INTO memories(
+                        id, type, title, summary, character_text,
+                        source_type, reusable_by_character, user_confirmed,
+                        created_at, updated_at
+                    ) VALUES (?, ?, ?, ?, ?, 'legacy_v4', ?, ?, ?, ?)
+                    """,
+                    (
+                        legacy_id("memory", source_id),
+                        memory_type,
+                        title,
+                        summary,
+                        character_text,
+                        int(
+                            confirmed
+                            and item.get("reusableByCharacter") is True
+                        ),
+                        int(confirmed),
+                        created_at,
+                        now,
+                    ),
+                )
+                imported["memories"] += int(bool(cursor.rowcount))
+
+            for item in messages[:2_000]:
+                if not isinstance(item, dict):
+                    imported["skipped_communications"] += 1
+                    continue
+                content_type = item.get("type")
+                source_id = item.get("id")
+                title = safe_visible(item.get("title"), 80)
+                body = safe_visible(item.get("body"), 600)
+                sent_at = item.get("sentAt")
+                if (
+                    content_type not in CONTENT_TYPES
+                    or not isinstance(source_id, str)
+                    or not source_id
+                    or item.get("reviewStatus") != "approved"
+                    or not isinstance(sent_at, str)
+                    or not title
+                    or not body
+                ):
+                    imported["skipped_communications"] += 1
+                    continue
+                action = item.get("action")
+                if not isinstance(action, dict):
+                    action = {}
+                action_kind = action.get("kind")
+                if action_kind not in {
+                    "none",
+                    "open_album",
+                    "open_version_demo",
+                }:
+                    action_kind = "none"
+                trace = item.get("trace")
+                if not isinstance(trace, dict):
+                    trace = {}
+                created_at = valid_iso(item.get("createdAt"), now)
+                cursor = connection.execute(
+                    """
+                    INSERT OR IGNORE INTO communications(
+                        id, type, title, body, review_status, sent_at,
+                        created_at, read_at, favorite, liked,
+                        remind_later, action_kind, action_target_id,
+                        delivery_mode, template_id, source_delivery_id,
+                        review_mode, review_reason
+                    ) VALUES (
+                        ?, ?, ?, ?, 'approved', ?, ?, ?, ?, ?, ?, ?, ?,
+                        ?, ?, '', 'local_rules', 'legacy_v4_import'
+                    )
+                    """,
+                    (
+                        legacy_id("message", source_id),
+                        content_type,
+                        title,
+                        body,
+                        valid_iso(sent_at, created_at),
+                        created_at,
+                        (
+                            valid_iso(item.get("readAt"), created_at)
+                            if item.get("readAt")
+                            else None
+                        ),
+                        int(item.get("favorite") is True),
+                        int(item.get("liked") is True),
+                        int(item.get("remindLater") is True),
+                        action_kind,
+                        str(action.get("targetId") or "")[:160] or None,
+                        (
+                            "proactive"
+                            if item.get("deliveryMode") == "proactive"
+                            else "system"
+                        ),
+                        str(trace.get("templateId") or "")[:160],
+                    ),
+                )
+                imported["communications"] += int(bool(cursor.rowcount))
+            self._audit(connection, "legacy_v4.imported")
+        return {
+            "imported": imported,
+            "snapshot": self.snapshot(),
+        }
 
     def export_data(self) -> dict:
         snapshot = self.snapshot()
