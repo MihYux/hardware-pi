@@ -1,31 +1,17 @@
 # ReHoYo Hardware Pi
 
-面向 Orange Pi 的三月七局域网陪伴终端。Pi 负责模型调用、API Key、角色规则和 SQLite 数据；手机浏览器使用与正式桌宠一致的浅色人物界面，充当显示器和对话入口。
+这是 [ReHoYo 正式版](https://github.com/MihYux/ReHoYo) 的 Orange Pi 网页运行版。与正式版相比，本仓库只移除 Electron 外壳和桌面窗口能力，保留两个核心模块：
 
-本项目不是 ReHoYo Electron 桌面版的 ARM 安装包。它保留对话、记忆、相册、通信、同行设置和模型控制，移除透明窗口、置顶、托盘、拖窗、多屏适配及桌面安装包等只对 Electron 有意义的功能。
+- ReHoYo 全球发行工作台：沿用正式版 Next.js 页面、工作流和本地数据逻辑；
+- 三月七桌宠：手机浏览器显示人物，并提供对话、相册、通信、同行设置和 API 控制面板。
 
-## 当前功能
-
-- 手机 PWA 人物显示与文字对话；
-- 首次进入、同行授权、勿扰、暂停和个性化设置；
-- 长期记忆、共同旅行相册和角色通信中心；
-- DeepSeek、智谱 GLM、CosyVoice 统一 API 控制面板；
-- API Key 只保存在 Pi，模型异常时自动使用本地回复；
-- OpenAI Chat Completions 兼容 Gateway，可供 ReHoYo 或其他 Python 项目调用；
-- Docker Compose 部署、SSH 更新和 SQLite 持久化。
-
-```text
-手机 PWA ───────────────┐
-ReHoYo 工作台 ──────────┼─> Orange Pi / FastAPI ─> DeepSeek / GLM / CosyVoice
-其他 Python 项目 ───────┘              │
-                                       └─> SQLite / 角色规则
-```
+透明窗口、置顶、托盘、拖窗、多屏适配和 Electron 安装包不会迁入。模型密钥统一保存在 Pi，工作台与桌宠都通过同一控制面板选择 DeepSeek、智谱 GLM 或 CosyVoice。
 
 ## 部署到 Orange Pi
 
 要求：64 位 Linux、Git、Docker Engine 和 Docker Compose plugin。
 
-仓库是公开仓库，直接使用 HTTPS clone，不需要 SSH Key 或 Deploy Key：
+仓库是公开仓库，使用 HTTPS clone，不需要 SSH Key：
 
 ```bash
 git clone https://github.com/MihYux/hardware-pi.git
@@ -33,31 +19,39 @@ cd hardware-pi
 ./deploy/install.sh
 ```
 
-安装脚本会自动：
+脚本会创建 `.env`、随机访问令牌和 `.data`，然后构建并启动两个模块。
 
-- 创建 `.env` 和三个随机访问令牌；
-- 创建 `.data` 持久化目录；
-- 构建并启动容器。
-
-查看 Pi 地址和配对令牌：
+查看 Pi 地址和令牌：
 
 ```bash
 hostname -I
 grep '^HARDWARE_PI_.*TOKEN=' .env
 ```
 
-手机访问：
+默认访问地址：
 
 ```text
-http://<Orange-Pi-IP>:8000
+三月七桌宠与控制面板  http://<Orange-Pi-IP>:8000
+ReHoYo 工作台         http://<Orange-Pi-IP>:3000
 ```
 
-在网页“连接设置”中填写：
+端口可在 `.env` 中通过 `HARDWARE_PI_PORT` 和 `HARDWARE_PI_WORKBENCH_PORT` 修改。
 
-- `HARDWARE_PI_DEVICE_TOKEN`：聊天、相册和同行数据；
-- `HARDWARE_PI_ADMIN_TOKEN`：模型控制面板。
+## 首次设置
 
-然后在“设置”中填写 DeepSeek、智谱或 CosyVoice API Key。API Key 不需要复制到手机其他位置。
+在 `8000` 页面打开“连接设置”：
+
+- `HARDWARE_PI_DEVICE_TOKEN`：桌宠对话、相册和同行数据；
+- `HARDWARE_PI_ADMIN_TOKEN`：统一模型控制面板。
+
+然后在“设置”中填写模型 API Key，并选择：
+
+- 工作台生成使用的 Provider；
+- 桌宠对话与发送前评审使用的 Provider；
+- 区域联网研究使用的智谱配置；
+- 语音阶段使用的 CosyVoice 配置。
+
+真实 API Key 不会发送到手机或工作台容器。工作台使用内部服务令牌调用 Pi Gateway。
 
 ## 更新
 
@@ -66,7 +60,7 @@ cd hardware-pi
 ./deploy/update.sh
 ```
 
-该脚本会拉取最新代码、重新构建并重启容器，`.env` 和 `.data` 不会被覆盖。
+更新不会覆盖 `.env` 和 `.data`。
 
 ## 检查与排错
 
@@ -74,32 +68,21 @@ cd hardware-pi
 docker compose ps
 docker compose logs --tail=200
 curl http://127.0.0.1:8000/api/v1/health
+curl http://127.0.0.1:3000/api/project/current
 ```
 
-如果手机无法访问：
+手机无法访问时，确认手机和 Pi 在同一局域网、路由器未启用客户端隔离，并允许 TCP `8000` 与 `3000`。不要把 `.env`、`.data`、访问令牌或 API Key 提交到 Git，也不要直接暴露到公网。
 
-1. 确认手机和 Pi 在同一局域网；
-2. 确认 `docker compose ps` 中服务状态正常；
-3. 确认路由器没有启用客户端隔离；
-4. 检查 Pi 防火墙是否允许 TCP `8000`。
+## 数据位置
 
-不要把 `.env`、`.data`、访问令牌或 API Key 提交到 Git，也不要把端口直接暴露到公网。
+- 统一模型设置：`.data/control-plane.json`
+- 桌宠会话与同行数据：`.data/hardware-pi.db`
+- 工作台项目、来源与发行数据：`.data/workbench/`
 
-## 接入 ReHoYo
-
-```env
-AI_PROVIDER=deepseek
-DEEPSEEK_API_KEY=<HARDWARE_PI_SERVICE_TOKEN>
-DEEPSEEK_BASE_URL=http://<Orange-Pi-IP>:8000/api/openai/v1
-```
-
-ReHoYo 会通过 Pi Gateway 使用控制面板选择的模型，不再保存真实 DeepSeek Key。
-
-完整接口见 [API 文档](docs/API.md)，迁移状态见 [迁移计划](docs/MIGRATION_PLAN.md)。
+接口与鉴权见 [docs/API.md](docs/API.md)，迁移边界见 [docs/MIGRATION_PLAN.md](docs/MIGRATION_PLAN.md)。
 
 ## 尚未完成
 
-- CosyVoice 流式语音；
-- 主动联系、勿扰和完整频率执行策略；
-- ReHoYo 角色发行交付包消费；
-- 正式桌面版旧数据导入工具。
+- CosyVoice 流式语音和手机播放队列；
+- 主动联系的完整勿扰、频率与发送前评审策略；
+- 正式桌宠旧数据导入及角色发行桥接真机验收。

@@ -9,6 +9,7 @@ from pathlib import Path
 class RuntimeSettings:
     host: str
     port: int
+    workbench_port: int
     data_dir: Path
     admin_token: str
     device_token: str
@@ -19,6 +20,9 @@ class RuntimeSettings:
         return cls(
             host=os.getenv("HARDWARE_PI_HOST", "0.0.0.0"),
             port=int(os.getenv("HARDWARE_PI_PORT", "8000")),
+            workbench_port=int(
+                os.getenv("HARDWARE_PI_WORKBENCH_PORT", "3000")
+            ),
             data_dir=Path(os.getenv("HARDWARE_PI_DATA_DIR", ".data")).resolve(),
             admin_token=os.getenv("HARDWARE_PI_ADMIN_TOKEN", ""),
             device_token=os.getenv("HARDWARE_PI_DEVICE_TOKEN", ""),

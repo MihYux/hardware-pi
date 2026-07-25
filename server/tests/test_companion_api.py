@@ -6,6 +6,7 @@ from app import main
 from app.companion_store import CompanionStore
 from app.conversations import ConversationStore
 from app.security import require_device
+from app.security import require_service
 from app.settings_store import SettingsStore
 
 
@@ -61,5 +62,37 @@ def test_companion_api_flow(tmp_path: Path, monkeypatch):
             reset = client.delete("/api/v1/companion/data")
             assert reset.status_code == 200
             assert reset.json()["profile"]["onboarding_completed"] is False
+    finally:
+        main.app.dependency_overrides.clear()
+
+
+def test_workbench_search_uses_control_plane_route(monkeypatch):
+    calls = []
+
+    class FakeProvider:
+        async def passthrough(self, path, **kwargs):
+            calls.append((path, kwargs))
+            return {"search_result": [{"title": "ok"}]}
+
+    monkeypatch.setattr(
+        main,
+        "workbench_zhipu_provider",
+        lambda: FakeProvider(),
+    )
+    main.app.dependency_overrides[require_service] = lambda: None
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/zhipu/v1/web_search",
+                json={"search_query": "崩坏：星穹铁道"},
+            )
+            assert response.status_code == 200
+            assert response.json()["search_result"][0]["title"] == "ok"
+            assert calls == [
+                (
+                    "web_search",
+                    {"body": {"search_query": "崩坏：星穹铁道"}},
+                )
+            ]
     finally:
         main.app.dependency_overrides.clear()

@@ -83,6 +83,52 @@ class OpenAICompatibleProvider:
         }
         return result
 
+    async def passthrough(
+        self,
+        path: str,
+        *,
+        method: str = "POST",
+        body: dict[str, Any] | None = None,
+        content: bytes | None = None,
+        content_type: str = "",
+        timeout: float = 120.0,
+    ) -> dict[str, Any]:
+        """Forward a whitelisted provider operation without exposing its key."""
+        url = f"{self.settings.base_url.rstrip('/')}/{path.lstrip('/')}"
+        headers = self._headers()
+        if content_type:
+            headers["Content-Type"] = content_type
+        try:
+            async with httpx.AsyncClient(timeout=timeout) as client:
+                response = await client.request(
+                    method,
+                    url,
+                    headers=headers,
+                    json=body if content is None else None,
+                    content=content,
+                )
+        except httpx.TimeoutException as error:
+            raise ProviderError("模型响应超时，请稍后重试。", 504) from error
+        except httpx.HTTPError as error:
+            raise ProviderError("无法连接模型服务。", 502) from error
+        if response.status_code in (401, 403):
+            raise ProviderError("API Key 无效或没有模型访问权限。", 401)
+        if response.status_code == 429:
+            raise ProviderError("模型请求过于频繁，请稍后重试。", 429)
+        if response.status_code >= 400:
+            raise ProviderError(
+                f"模型服务请求失败（HTTP {response.status_code}）："
+                f"{response.text[:300]}",
+                response.status_code,
+            )
+        try:
+            result = response.json()
+        except ValueError as error:
+            raise ProviderError("模型服务返回了无法解析的数据。") from error
+        if not isinstance(result, dict):
+            raise ProviderError("模型服务返回的数据格式无效。")
+        return result
+
     async def chat(
         self,
         messages: list[dict[str, str]],

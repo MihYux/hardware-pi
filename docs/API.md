@@ -224,3 +224,16 @@ DEEPSEEK_BASE_URL=http://orange-pi.local:8000/api/openai/v1
 ```
 
 此时 ReHoYo 不再持有真实 DeepSeek Key。
+
+## 工作台内部智谱入口
+
+Hardware Pi 自带工作台使用以下服务令牌接口，手机和外部浏览器不应直接调用：
+
+```http
+POST /api/zhipu/v1/web_search
+POST /api/zhipu/v1/files/parser/create
+GET  /api/zhipu/v1/files/parser/result/<task-id>/text
+Authorization: Bearer <service-token>
+```
+
+它们分别承担区域联网研究和云端文件解析，真实智谱 API Key 仍只保存在统一控制面。

@@ -36,7 +36,7 @@ PY
   echo "Add provider API keys with: nano $ROOT_DIR/.env"
 fi
 
-mkdir -p .data
+mkdir -p .data/workbench
 chmod 700 .data
 docker compose up -d --build
 
@@ -44,5 +44,7 @@ echo
 echo "Hardware Pi is starting."
 PI_ADDRESS=$(hostname -I 2>/dev/null | awk '{print $1}')
 PUBLISHED_PORT=$(docker compose port hardware-pi 8000 2>/dev/null | awk -F: 'END {print $NF}')
-echo "Open: http://${PI_ADDRESS:-orange-pi.local}:${PUBLISHED_PORT:-8000}"
+WORKBENCH_PORT=$(docker compose port workbench 3000 2>/dev/null | awk -F: 'END {print $NF}')
+echo "Companion: http://${PI_ADDRESS:-orange-pi.local}:${PUBLISHED_PORT:-8000}"
+echo "Workbench: http://${PI_ADDRESS:-orange-pi.local}:${WORKBENCH_PORT:-3000}"
 echo "Tokens are stored in: $ROOT_DIR/.env"

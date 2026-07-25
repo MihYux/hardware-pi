@@ -4,6 +4,7 @@ import time
 from contextlib import asynccontextmanager
 from pathlib import Path
 from typing import Any
+from urllib.parse import quote
 
 from fastapi import (
     Depends,
@@ -64,7 +65,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="ReHoYo Hardware Pi Control Plane",
-    version="0.2.1",
+    version="0.3.0",
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -102,6 +103,10 @@ async def health():
         "status": "ok",
         "service": "hardware-pi",
         "version": app.version,
+        "modules": {
+            "companion": {"port": runtime.port},
+            "workbench": {"port": runtime.workbench_port},
+        },
         "providers": {
             name: {
                 "configured": settings[name]["configured"],
@@ -300,6 +305,46 @@ async def openai_compatible_proxy(
     result = await provider.request(body)
     result.pop("_gateway", None)
     return result
+
+
+def workbench_zhipu_provider() -> OpenAICompatibleProvider:
+    configured = settings_store.load()
+    provider_name = configured.routing.region_search
+    return OpenAICompatibleProvider(getattr(configured, provider_name))
+
+
+@app.post("/api/zhipu/v1/web_search")
+async def workbench_web_search_proxy(
+    body: dict[str, Any],
+    _: None = Depends(require_service),
+):
+    return await workbench_zhipu_provider().passthrough(
+        "web_search",
+        body=body,
+    )
+
+
+@app.post("/api/zhipu/v1/files/parser/create")
+async def workbench_file_parse_proxy(
+    request: Request,
+    _: None = Depends(require_service),
+):
+    return await workbench_zhipu_provider().passthrough(
+        "files/parser/create",
+        content=await request.body(),
+        content_type=request.headers.get("content-type", ""),
+    )
+
+
+@app.get("/api/zhipu/v1/files/parser/result/{task_id}/text")
+async def workbench_file_parse_result_proxy(
+    task_id: str,
+    _: None = Depends(require_service),
+):
+    return await workbench_zhipu_provider().passthrough(
+        f"files/parser/result/{quote(task_id, safe='')}/text",
+        method="GET",
+    )
 
 
 web_dist = Path(__file__).resolve().parents[2] / "web" / "dist"

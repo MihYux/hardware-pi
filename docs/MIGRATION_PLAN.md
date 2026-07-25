@@ -1,6 +1,6 @@
 # 从 Electron 桌宠迁移到 Hardware Pi
 
-Hardware Pi 是面向 Orange Pi 的专用运行时，不是 ReHoYo 正式桌面版的 ARM 复刻。迁移原则是保留陪伴业务能力，用局域网 API 和手机 PWA 替换桌面交互，并永久删除只对 Electron 窗口有意义的实现。
+Hardware Pi 是面向 Orange Pi 的无 Electron 运行时。迁移原则是直接复用 ReHoYo 已有网页层和业务逻辑，用局域网 API 替换 Electron IPC；全球发行工作台和三月七桌宠必须同时保留。
 
 ## 当前里程碑
 
@@ -13,6 +13,13 @@ Hardware Pi 是面向 Orange Pi 的专用运行时，不是 ReHoYo 正式桌面�
 - 本地离线回复与基础输入输出安全检查；
 - SQLite 会话记录；
 - Docker 与 SSH 部署。
+
+第三个可运行版本已经加入原版工作台网页层：
+
+- 正式版 Next.js `app`、`components` 与 `lib` 直接迁入；
+- 工作台和桌宠分别通过 `3000` 与 `8000` 访问；
+- 工作台生成、区域搜索和文件解析都通过 Pi 统一密钥路由；
+- 不包含 ReHoYo Electron 外壳和桌宠 Electron 主进程。
 
 第二阶段陪伴数据初步版已经完成：
 
@@ -47,9 +54,8 @@ Hardware Pi 是面向 Orange Pi 的专用运行时，不是 ReHoYo 正式桌面�
 - 透明、无边框、置顶、最小化、关闭和托盘窗口控制；
 - 拖窗、四边吸附、窗口位置与尺寸记忆、多屏和桌面工作区适配；
 - Electron 安装包、代码签名、桌面自动更新与桌面进程看门狗；
-- ReHoYo 全球发行工作台的 Pi 端界面副本。
 
-正式工作台和其他 Python 项目继续作为独立客户端，通过 HTTP、WebSocket、OpenAI 兼容 Gateway 或后续发行桥接连接 Hardware Pi。GPIO、摄像头和传感器也由上层硬件项目按需扩展，不作为桌面版迁移内容。
+GPIO、摄像头和传感器由上层硬件项目按需扩展，不作为网页迁移的必需内容。
 
 ## 后续阶段
 

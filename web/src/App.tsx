@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   ArrowLeft,
   BookOpenText,
+  Briefcase,
   Camera,
   ChatCircleDots,
   EnvelopeSimple,
@@ -19,6 +20,7 @@ import {
   fetchCompanionSnapshot,
   fetchControlSettings,
   fetchHistory,
+  fetchServiceInfo,
   saveControlSettings,
   saveTokens,
   sendChat,
@@ -83,7 +85,14 @@ export default function App() {
     "ready" | "offline" | "unauthorized"
   >(device ? "offline" : "unauthorized");
   const [notice, setNotice] = useState("");
+  const [workbenchPort, setWorkbenchPort] = useState(3000);
   const messageEnd = useRef<HTMLDivElement>(null);
+
+  useEffect(() => {
+    void fetchServiceInfo()
+      .then((service) => setWorkbenchPort(service.modules.workbench.port))
+      .catch(() => undefined);
+  }, []);
 
   useEffect(() => {
     if (!deviceToken()) return;
@@ -132,6 +141,15 @@ export default function App() {
   function openPanel(tab: PanelTab) {
     setPanelTab(tab);
     setMode("panel");
+  }
+
+  function openWorkbench() {
+    const url = new URL(window.location.href);
+    url.port = String(workbenchPort);
+    url.pathname = "/brief";
+    url.search = "";
+    url.hash = "";
+    window.location.assign(url);
   }
 
   async function refreshCompanion() {
@@ -248,6 +266,14 @@ export default function App() {
           <nav className="pet-controls" aria-label="网页控制">
             <button
               className="icon-button"
+              aria-label="打开 ReHoYo 工作台"
+              title="打开 ReHoYo 工作台"
+              onClick={openWorkbench}
+            >
+              <Briefcase weight="fill" />
+            </button>
+            <button
+              className="icon-button"
               aria-label="连接设置"
               title="连接设置"
               onClick={openPairing}
@@ -362,6 +388,14 @@ export default function App() {
           </nav>
 
           <nav className="main-nav" aria-label="功能导航">
+            <div className="nav-group">
+              <button className="nav-row" onClick={openWorkbench}>
+                <span className="nav-icon">
+                  <Briefcase weight="fill" />
+                </span>
+                <span className="nav-label">工作台</span>
+              </button>
+            </div>
             <div className="nav-group">
               <button className="nav-row" disabled title="语音将在下一阶段迁移">
                 <span className="nav-icon">

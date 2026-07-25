@@ -41,6 +41,17 @@ async function parseResponse<T>(response: Response): Promise<T> {
   return payload as T;
 }
 
+export async function fetchServiceInfo(): Promise<{
+  version: string;
+  modules: {
+    companion: { port: number };
+    workbench: { port: number };
+  };
+}> {
+  const response = await fetch("/api/v1/health");
+  return parseResponse(response);
+}
+
 export async function fetchHistory(): Promise<ChatMessage[]> {
   const response = await fetch(`/api/v1/conversations/${encodeURIComponent(sessionId())}`, {
     headers: { Authorization: `Bearer ${deviceToken()}` },
