@@ -1,7 +1,26 @@
-import { useEffect, useMemo, useState, type FormEvent } from "react";
+import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
+import {
+  ArrowLeft,
+  ArrowRight,
+  Bell,
+  BookOpenText,
+  Camera,
+  CheckCircle,
+  Database,
+  DownloadSimple,
+  EnvelopeSimple,
+  Footprints,
+  Heart,
+  MapTrifold,
+  PauseCircle,
+  PlayCircle,
+  ShieldCheck,
+  Sparkle,
+  Star,
+  Trash,
+} from "@phosphor-icons/react";
 import {
   completeOnboarding,
-  createMemory,
   deleteCompanionData,
   deleteMemory,
   exportCompanionData,
@@ -23,10 +42,30 @@ type SnapshotProps = {
 };
 
 const firstChoices = [
-  ["take_photos", "多拍照片", "把漂亮的风景收进共同相册"],
-  ["explore_places", "探索新地方", "一起看看没有到过的地方"],
-  ["hear_stories", "听新故事", "记住旅途中遇见的人和事"],
-  ["walk_slowly", "慢慢同行", "不赶路，也不催促彼此"],
+  {
+    value: "take_photos",
+    label: "拍很多照片",
+    description: "把沿途值得记住的瞬间都留下来",
+    icon: Camera,
+  },
+  {
+    value: "explore_places",
+    label: "探索新地方",
+    description: "一起去没见过的地方转一转",
+    icon: MapTrifold,
+  },
+  {
+    value: "hear_stories",
+    label: "听新的故事",
+    description: "慢慢认识旅途中遇到的人和事",
+    icon: BookOpenText,
+  },
+  {
+    value: "walk_slowly",
+    label: "什么都不赶",
+    description: "不用完成任务，只是一起慢慢走",
+    icon: Footprints,
+  },
 ] as const;
 
 const contentLabels: Record<ContentType, string> = {
@@ -37,7 +76,7 @@ const contentLabels: Record<ContentType, string> = {
   version_preheat: "版本预热",
   version_launch: "版本上线",
   version_sustain: "版本持续",
-  recall: "低频召回",
+  recall: "召回",
 };
 
 export function Onboarding({
@@ -45,19 +84,22 @@ export function Onboarding({
 }: {
   onComplete: (snapshot: CompanionSnapshot) => void;
 }) {
+  const [step, setStep] = useState(0);
+  const [consent, setConsent] = useState(false);
   const [displayName, setDisplayName] = useState("开拓者");
-  const [firstChoice, setFirstChoice] =
-    useState<(typeof firstChoices)[number][0]>("take_photos");
   const [proactive, setProactive] = useState(false);
   const [memory, setMemory] = useState(true);
   const [personalization, setPersonalization] = useState(true);
-  const [acceptedConcept, setAcceptedConcept] = useState(false);
-  const [acceptedData, setAcceptedData] = useState(false);
+  const [recall, setRecall] = useState(false);
+  const [weeklyLimit, setWeeklyLimit] = useState(2);
+  const [quietStart, setQuietStart] = useState("22:00");
+  const [quietEnd, setQuietEnd] = useState("09:00");
+  const [firstChoice, setFirstChoice] =
+    useState<(typeof firstChoices)[number]["value"]>("take_photos");
   const [busy, setBusy] = useState(false);
   const [notice, setNotice] = useState("");
 
-  async function submit(event: FormEvent) {
-    event.preventDefault();
+  async function finish() {
     setBusy(true);
     setNotice("");
     try {
@@ -66,15 +108,23 @@ export function Onboarding({
         region: "china",
         language: "zh-CN",
         time_zone: "Asia/Shanghai",
-        allowed_content_types: ["daily", "photo", "postcard", "relationship"],
+        allowed_content_types: [
+          "daily",
+          "photo",
+          "postcard",
+          "relationship",
+          "version_preheat",
+          "version_launch",
+          "version_sustain",
+        ],
         proactive_contact_enabled: proactive,
-        recall_enabled: false,
+        recall_enabled: recall,
         personalization_enabled: personalization,
         memory_enabled: memory,
-        quiet_hours: { start: "22:00", end: "09:00" },
-        weekly_contact_limit: 2,
-        accepted_concept: acceptedConcept,
-        accepted_data_flow: acceptedData,
+        quiet_hours: { start: quietStart, end: quietEnd },
+        weekly_contact_limit: weeklyLimit,
+        accepted_concept: true,
+        accepted_data_flow: true,
         first_join_choice: memory ? firstChoice : null,
         consent_version: "hardware-pi-v1",
       });
@@ -87,128 +137,271 @@ export function Onboarding({
   }
 
   return (
-    <section className="data-page onboarding-page">
-      <div className="onboarding-intro">
-        <span className="eyebrow">FIRST CONNECTION</span>
-        <h1>先决定怎样同行。</h1>
-        <p>
-          这是运行在你自己 Orange Pi 上的概念体验。模型请求只在你主动聊天或允许的功能中发生，
-          API Key 始终保留在 Pi。
-        </p>
-        <div className="privacy-stack">
-          <span>01 · 你可以随时暂停同行</span>
-          <span>02 · 每条记忆都能关闭引用或删除</span>
-          <span>03 · 可导出并删除全部同行数据</span>
-        </div>
+    <section
+      className="companion-onboarding"
+      role="dialog"
+      aria-modal="true"
+      aria-label="开始角色同行计划"
+    >
+      <div className="onboarding-progress" aria-label="首次进入进度">
+        {[0, 1, 2, 3].map((index) => (
+          <span key={index} className={index <= step ? "active" : ""} />
+        ))}
       </div>
 
-      <form className="onboarding-form data-card" onSubmit={submit}>
-        <label>
-          <span>希望三月七怎样称呼你</span>
-          <input
-            value={displayName}
-            maxLength={24}
-            onChange={(event) => setDisplayName(event.target.value)}
-          />
-        </label>
-
-        <fieldset>
-          <legend>第一次同行想做什么</legend>
-          <div className="choice-grid">
-            {firstChoices.map(([value, label, detail]) => (
-              <label className={`choice-card ${firstChoice === value ? "selected" : ""}`} key={value}>
-                <input
-                  type="radio"
-                  name="first-choice"
-                  value={value}
-                  checked={firstChoice === value}
-                  onChange={() => setFirstChoice(value)}
-                  disabled={!memory}
-                />
-                <strong>{label}</strong>
-                <small>{detail}</small>
-              </label>
-            ))}
+      <div className="onboarding-content">
+        {step === 0 ? (
+          <div className="onboarding-step onboarding-welcome">
+            <div className="onboarding-hero-icon">
+              <Sparkle weight="fill" />
+            </div>
+            <span className="eyebrow">REHOYO · 角色同行计划</span>
+            <h1>让喜欢的角色，陪你走过每一次旅程。</h1>
+            <p>
+              这是运行在 Orange Pi 上的本地概念体验。你选择三月七后，
+              她会通过手机桌宠、共同相册和通信中心进行低打扰陪伴。
+            </p>
+            <div className="onboarding-disclosure-grid">
+              <article>
+                <ShieldCheck weight="duotone" />
+                <strong>由你主动选择</strong>
+                <span>联系、记忆、版本内容和召回都能关闭</span>
+              </article>
+              <article>
+                <Database weight="duotone" />
+                <strong>数据留在 Pi</strong>
+                <span>API Key 不会发送到手机浏览器</span>
+              </article>
+            </div>
+            <div className="onboarding-ai-note">
+              <strong>AI 与第三方服务说明</strong>
+              <p>
+                在线聊天启用后，输入会发送给控制面板中选择的模型；
+                普通聊天不会自动保存为长期记忆，只有明确确认的内容才会进入相册。
+              </p>
+            </div>
+            <label className="onboarding-consent">
+              <input
+                type="checkbox"
+                checked={consent}
+                onChange={(event) => setConsent(event.target.checked)}
+              />
+              <span>我理解这是概念体验，并愿意继续设置角色同行。</span>
+            </label>
           </div>
-        </fieldset>
+        ) : null}
 
-        <div className="setting-list">
-          <Toggle
-            label="长期记忆"
-            detail="只引用你明确确认、且允许引用的记忆"
-            checked={memory}
-            onChange={setMemory}
-          />
-          <Toggle
-            label="个性化陪伴"
-            detail="允许使用称呼和已授权记忆调整回复"
-            checked={personalization}
-            onChange={setPersonalization}
-          />
-          <Toggle
-            label="主动联系"
-            detail="当前只保存偏好，完整联系策略将在下一阶段启用"
-            checked={proactive}
-            onChange={setProactive}
-          />
-        </div>
+        {step === 1 ? (
+          <div className="onboarding-step onboarding-character">
+            <span className="eyebrow">选择同行角色 · MVP</span>
+            <h1>这一次，和三月七同行</h1>
+            <div className="onboarding-character-card">
+              <div>
+                <img src="/assets/march7th-pet.png" alt="三月七" />
+              </div>
+              <section>
+                <span>星穹列车乘员</span>
+                <h2>三月七</h2>
+                <p>
+                  活泼、亲近，喜欢拍照和记录新的回忆。
+                  真正重要的时候，她也会认真地陪在同伴身边。
+                </p>
+              </section>
+            </div>
+            <div className="onboarding-boundaries">
+              <article>
+                <strong>她可能会做</strong>
+                <ul>
+                  <li>通过手机提供低打扰陪伴</li>
+                  <li>保存明确确认的共同记忆</li>
+                  <li>展示经过审核的角色通信</li>
+                </ul>
+              </article>
+              <article>
+                <strong>她不会做</strong>
+                <ul>
+                  <li>擅自读取真实账号或消费数据</li>
+                  <li>未经确认永久保存普通聊天</li>
+                  <li>绕过你的授权、勿扰或删除选择</li>
+                </ul>
+              </article>
+            </div>
+          </div>
+        ) : null}
 
-        <label className="consent-row">
-          <input
-            type="checkbox"
-            checked={acceptedConcept}
-            onChange={(event) => setAcceptedConcept(event.target.checked)}
-          />
-          <span>我知道这是非官方概念体验，并可随时退出。</span>
-        </label>
-        <label className="consent-row">
-          <input
-            type="checkbox"
-            checked={acceptedData}
-            onChange={(event) => setAcceptedData(event.target.checked)}
-          />
-          <span>我知道聊天内容会发送给控制面板中选定的模型服务。</span>
-        </label>
+        {step === 2 ? (
+          <div className="onboarding-step onboarding-preferences">
+            <span className="eyebrow">授权与偏好</span>
+            <h1>你希望怎样被联系？</h1>
+            <p className="onboarding-step-note">
+              这些设置之后都能更改。外部项目不能覆盖你的选择。
+            </p>
+            <label className="onboarding-name-field">
+              希望角色怎样称呼你
+              <input
+                value={displayName}
+                maxLength={24}
+                onChange={(event) => setDisplayName(event.target.value)}
+              />
+            </label>
+            <label className="onboarding-toggle-row">
+              <span>
+                <strong>允许主动联系</strong>
+                <small>完整联系策略将在后续阶段启用</small>
+              </span>
+              <input
+                type="checkbox"
+                checked={proactive}
+                onChange={(event) => setProactive(event.target.checked)}
+              />
+            </label>
+            <div className="onboarding-content-types">
+              <span>数据和关系控制</span>
+              <ToggleRow
+                label="有限个性化"
+                detail="只使用明确允许的称呼和偏好"
+                checked={personalization}
+                onChange={setPersonalization}
+              />
+              <ToggleRow
+                label="长期记忆"
+                detail="可随时查看、关闭引用和删除"
+                checked={memory}
+                onChange={setMemory}
+              />
+              <ToggleRow
+                label="低频召回"
+                detail="默认关闭，需要单独同意"
+                checked={recall}
+                onChange={setRecall}
+              />
+            </div>
+            <div className="onboarding-compact-grid">
+              <label>
+                <span>每周主动消息上限</span>
+                <select
+                  value={weeklyLimit}
+                  onChange={(event) => setWeeklyLimit(Number(event.target.value))}
+                >
+                  {[0, 1, 2, 3, 4, 5, 6, 7].map((value) => (
+                    <option key={value} value={value}>{value} 次</option>
+                  ))}
+                </select>
+              </label>
+              <label>
+                <span>勿扰开始</span>
+                <input
+                  type="time"
+                  value={quietStart}
+                  onChange={(event) => setQuietStart(event.target.value)}
+                />
+              </label>
+              <label>
+                <span>勿扰结束</span>
+                <input
+                  type="time"
+                  value={quietEnd}
+                  onChange={(event) => setQuietEnd(event.target.value)}
+                />
+              </label>
+            </div>
+          </div>
+        ) : null}
 
-        {notice ? <div className="inline-notice">{notice}</div> : null}
+        {step === 3 ? (
+          <div className="onboarding-step onboarding-first-choice">
+            <span className="eyebrow">建立第一次共同记忆</span>
+            <h1>如果下一次一起旅行，你最想做什么？</h1>
+            <p className="onboarding-step-note">
+              {memory
+                ? "完成后，这个选择会成为第一条可管理的共同记忆。"
+                : "你关闭了长期记忆，这个选择不会写入相册。"}
+            </p>
+            <div className="first-choice-grid">
+              {firstChoices.map((choice) => {
+                const Icon = choice.icon;
+                const selected = firstChoice === choice.value;
+                return (
+                  <button
+                    type="button"
+                    className={selected ? "selected" : ""}
+                    key={choice.value}
+                    onClick={() => setFirstChoice(choice.value)}
+                  >
+                    <Icon weight={selected ? "fill" : "duotone"} />
+                    <span>
+                      <strong>{choice.label}</strong>
+                      <small>{choice.description}</small>
+                    </span>
+                    {selected ? <CheckCircle weight="fill" /> : null}
+                  </button>
+                );
+              })}
+            </div>
+            <div className="onboarding-summary">
+              <ShieldCheck weight="fill" />
+              <p>
+                主动联系每周最多 {weeklyLimit} 次，勿扰时间{" "}
+                {quietStart}～{quietEnd}，召回{recall ? "已开启" : "保持关闭"}。
+              </p>
+            </div>
+          </div>
+        ) : null}
+
+        {notice ? <div className="panel-notice error">{notice}</div> : null}
+      </div>
+
+      <div className="onboarding-actions">
         <button
-          className="primary-action"
-          disabled={
-            busy ||
-            !displayName.trim() ||
-            !acceptedConcept ||
-            !acceptedData
-          }
+          type="button"
+          className="onboarding-back"
+          disabled={step === 0 || busy}
+          onClick={() => setStep((value) => Math.max(0, value - 1))}
         >
-          {busy ? "正在建立同行…" : "开始同行"}
+          <ArrowLeft weight="bold" />
+          上一步
         </button>
-      </form>
+        {step < 3 ? (
+          <button
+            type="button"
+            className="onboarding-next"
+            disabled={(step === 0 && !consent) || !displayName.trim()}
+            onClick={() => setStep((value) => Math.min(3, value + 1))}
+          >
+            继续
+            <ArrowRight weight="bold" />
+          </button>
+        ) : (
+          <button
+            type="button"
+            className="onboarding-next"
+            disabled={busy || !displayName.trim()}
+            onClick={() => void finish()}
+          >
+            <Sparkle weight="fill" />
+            {busy ? "正在建立同行…" : "开始同行"}
+          </button>
+        )}
+      </div>
     </section>
   );
 }
 
 export function MemoriesPage({ snapshot, onRefresh }: SnapshotProps) {
-  const [title, setTitle] = useState("");
-  const [summary, setSummary] = useState("");
+  const [filter, setFilter] = useState<"all" | "choice" | "photo">("all");
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
+  const memories = snapshot.memories.filter(
+    (memory) => filter === "all" || memory.type === filter,
+  );
 
-  async function addMemory(event: FormEvent) {
-    event.preventDefault();
-    setBusy("create");
-    setNotice("");
+  async function toggleMemoryEnabled() {
+    setBusy("master");
     try {
-      await createMemory({
-        type: "photo",
-        title: title.trim(),
-        summary: summary.trim(),
-        reusable_by_character: true,
-        user_confirmed: true,
+      await updateCompanionProfile({
+        memory_enabled: !snapshot.profile.memory_enabled,
       });
-      setTitle("");
-      setSummary("");
       await onRefresh();
-      setNotice("这段共同记忆已经保存在 Pi");
     } catch (error) {
       setNotice((error as Error).message);
     } finally {
@@ -218,11 +411,13 @@ export function MemoriesPage({ snapshot, onRefresh }: SnapshotProps) {
 
   async function patchMemory(
     memory: MemoryRecord,
-    patch: Partial<MemoryRecord>,
+    reusable: boolean,
   ) {
     setBusy(memory.id);
     try {
-      await updateMemory(memory.id, patch);
+      await updateMemory(memory.id, {
+        reusable_by_character: reusable,
+      });
       await onRefresh();
     } catch (error) {
       setNotice((error as Error).message);
@@ -244,93 +439,149 @@ export function MemoriesPage({ snapshot, onRefresh }: SnapshotProps) {
     }
   }
 
+  async function clearMemories() {
+    if (!window.confirm("确定清空全部共同记忆吗？此操作无法撤销。")) return;
+    setBusy("clear");
+    try {
+      await Promise.all(snapshot.memories.map((memory) => deleteMemory(memory.id)));
+      await onRefresh();
+    } catch (error) {
+      setNotice((error as Error).message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  async function downloadExport() {
+    const payload = await exportCompanionData();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `hardware-pi-companion-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 500);
+  }
+
   return (
-    <section className="data-page">
-      <header className="data-header">
+    <section className="album-panel embedded" aria-label="共同旅行相册">
+      <header className="panel-section-header">
         <div>
-          <span className="eyebrow">SHARED MEMORY</span>
-          <h1>共同旅行相册</h1>
-          <p>
-            当前保存 {snapshot.counts.memories} 条记忆。只有“允许引用”且已确认的内容会进入模型上下文。
-          </p>
+          <span className="eyebrow">SHARED JOURNEY ALBUM</span>
+          <h2>共同旅行相册</h2>
+          <p>只保存你明确确认的选择和照片。</p>
         </div>
-        <span className={`memory-master ${snapshot.profile.memory_enabled ? "enabled" : ""}`}>
-          {snapshot.profile.memory_enabled ? "记忆引用已开启" : "记忆引用已关闭"}
-        </span>
+        <BookOpenText weight="duotone" />
       </header>
-
-      <form className="memory-create data-card" onSubmit={addMemory}>
-        <div>
-          <span className="eyebrow">NEW MEMORY</span>
-          <h2>记下一张今天的照片</h2>
-        </div>
-        <label>
-          <span>标题</span>
-          <input
-            value={title}
-            maxLength={80}
-            placeholder="例如：第一次在手机上见面"
-            onChange={(event) => setTitle(event.target.value)}
-          />
-        </label>
-        <label>
-          <span>发生了什么</span>
-          <textarea
-            value={summary}
-            maxLength={500}
-            rows={3}
-            placeholder="这段文字会作为共同记忆保存"
-            onChange={(event) => setSummary(event.target.value)}
-          />
-        </label>
+      <div className="album-privacy-bar">
+        <span>
+          <ShieldCheck weight="fill" />
+          <span>
+            <strong>长期记忆</strong>
+            <small>
+              {snapshot.profile.memory_enabled
+                ? "三月七可以引用你允许的记忆"
+                : "现有记录保留，但不会提供给模型"}
+            </small>
+          </span>
+        </span>
         <button
-          className="primary-action"
-          disabled={busy === "create" || !title.trim() || !summary.trim()}
+          disabled={Boolean(busy)}
+          className={snapshot.profile.memory_enabled ? "active" : ""}
+          onClick={() => void toggleMemoryEnabled()}
         >
-          {busy === "create" ? "保存中…" : "保存共同记忆"}
+          {snapshot.profile.memory_enabled ? "已开启" : "已关闭"}
         </button>
-      </form>
-
-      {notice ? <div className="control-notice">{notice}</div> : null}
-
-      <div className="memory-grid">
-        {snapshot.memories.map((memory) => (
-          <article className="memory-card data-card" key={memory.id}>
-            <header>
-              <span>{memory.type === "choice" ? "同行选择" : "共同照片"}</span>
-              <time>{formatDate(memory.created_at)}</time>
-            </header>
-            <h2>{memory.title}</h2>
-            <p>{memory.summary}</p>
-            {memory.character_text ? <blockquote>{memory.character_text}</blockquote> : null}
-            <div className="memory-actions">
-              <label>
-                <input
-                  type="checkbox"
-                  checked={memory.reusable_by_character}
+      </div>
+      <div className="album-filters">
+        {([
+          ["all", "全部"],
+          ["choice", "同行选择"],
+          ["photo", "照片"],
+        ] as const).map(([value, label]) => (
+          <button
+            className={filter === value ? "active" : ""}
+            key={value}
+            onClick={() => setFilter(value)}
+          >
+            {label}
+          </button>
+        ))}
+      </div>
+      {notice ? <div className="panel-notice">{notice}</div> : null}
+      <div className="album-memory-list">
+        {memories.map((memory) => (
+          <article className="memory-card" key={memory.id}>
+            <div className="memory-visual">
+              {memory.type === "photo" ? (
+                <Camera weight="duotone" />
+              ) : (
+                <Footprints weight="duotone" />
+              )}
+              <span>{memory.type === "photo" ? "共同照片" : "同行选择"}</span>
+            </div>
+            <div className="memory-card-content">
+              <div className="memory-card-meta">
+                <time>{formatDate(memory.created_at)}</time>
+                {memory.user_confirmed ? (
+                  <span className="confirmed-memory">
+                    <CheckCircle weight="fill" />
+                    已确认
+                  </span>
+                ) : null}
+              </div>
+              <h3>{memory.title}</h3>
+              <p>{memory.summary}</p>
+              {memory.character_text ? <blockquote>{memory.character_text}</blockquote> : null}
+              <div className="memory-card-actions">
+                <button
+                  className={`memory-reference-toggle ${
+                    memory.reusable_by_character ? "active" : ""
+                  }`}
                   disabled={busy === memory.id}
-                  onChange={(event) =>
-                    void patchMemory(memory, {
-                      reusable_by_character: event.target.checked,
-                    })
+                  onClick={() =>
+                    void patchMemory(memory, !memory.reusable_by_character)
                   }
-                />
-                允许三月七引用
-              </label>
-              <button
-                className="danger-link"
-                disabled={busy === memory.id}
-                onClick={() => void removeMemory(memory)}
-              >
-                删除
-              </button>
+                >
+                  <ShieldCheck weight="fill" />
+                  {memory.reusable_by_character ? "允许未来引用" : "不再引用"}
+                </button>
+                <button
+                  className="memory-delete-button"
+                  disabled={busy === memory.id}
+                  aria-label={`删除 ${memory.title}`}
+                  onClick={() => void removeMemory(memory)}
+                >
+                  <Trash />
+                </button>
+              </div>
             </div>
           </article>
         ))}
-        {!snapshot.memories.length ? (
-          <div className="data-empty">还没有共同记忆。你可以从上方添加第一张照片。</div>
+        {!memories.length ? (
+          <div className="album-empty">
+            <Camera weight="duotone" />
+            <strong>还没有这一类共同记忆</strong>
+            <p>点左侧“拍照”可以保存一张新的共同照片。</p>
+          </div>
         ) : null}
       </div>
+      <footer className="album-footer">
+        <button className="album-export-button" onClick={() => void downloadExport()}>
+          <DownloadSimple />
+          导出同行数据
+        </button>
+        <button
+          className="album-clear-button"
+          disabled={!snapshot.memories.length || busy === "clear"}
+          onClick={() => void clearMemories()}
+        >
+          <Trash />
+          清空相册
+        </button>
+      </footer>
     </section>
   );
 }
@@ -341,8 +592,9 @@ export function CommunicationsPage({ snapshot, onRefresh }: SnapshotProps) {
   );
   const [filter, setFilter] = useState<"all" | "unread" | "favorite">("all");
   const [notice, setNotice] = useState("");
+  const markedRead = useRef(new Set<string>());
   const selected = snapshot.communications.find(
-    (item) => item.id === selectedId,
+    (message) => message.id === selectedId,
   );
   const messages = useMemo(
     () =>
@@ -355,20 +607,17 @@ export function CommunicationsPage({ snapshot, onRefresh }: SnapshotProps) {
   );
 
   useEffect(() => {
-    const message = snapshot.communications.find(
-      (item) => item.id === selectedId,
-    );
-    if (!message || message.read_at) return;
-    void updateCommunication(message.id, { read: true })
+    if (!selected || selected.read_at || markedRead.current.has(selected.id)) return;
+    markedRead.current.add(selected.id);
+    void updateCommunication(selected.id, { read: true })
       .then(onRefresh)
       .catch((error) => setNotice((error as Error).message));
-  }, [onRefresh, selectedId, snapshot.communications]);
+  }, [onRefresh, selected]);
 
   async function patch(
     message: Communication,
     input: Parameters<typeof updateCommunication>[1],
   ) {
-    setNotice("");
     try {
       await updateCommunication(message.id, input);
       await onRefresh();
@@ -377,87 +626,93 @@ export function CommunicationsPage({ snapshot, onRefresh }: SnapshotProps) {
     }
   }
 
-  async function selectMessage(message: Communication) {
-    setSelectedId(message.id);
-    if (!message.read_at) await patch(message, { read: true });
-  }
-
   return (
-    <section className="data-page">
-      <header className="data-header">
+    <section className="communication-panel embedded" aria-label="角色通信中心">
+      <header className="panel-section-header">
         <div>
           <span className="eyebrow">CHARACTER COMMUNICATION</span>
-          <h1>角色通信中心</h1>
-          <p>这里只展示已经通过审核并发送给玩家的角色消息。</p>
+          <h2>角色通信中心</h2>
+          <p>只展示已经审核并发送的角色消息。</p>
         </div>
-        <span className="unread-counter">{snapshot.counts.unread_communications} 未读</span>
+        <EnvelopeSimple weight="duotone" />
       </header>
-
-      {notice ? <div className="control-notice">{notice}</div> : null}
-
-      <div className="communications-layout">
-        <aside className="message-index data-card">
-          <div className="filter-row">
-            {(["all", "unread", "favorite"] as const).map((value) => (
-              <button
-                className={filter === value ? "active" : ""}
-                key={value}
-                onClick={() => setFilter(value)}
-              >
-                {value === "all" ? "全部" : value === "unread" ? "未读" : "收藏"}
-              </button>
-            ))}
-          </div>
+      <div className="communication-filters">
+        {(["all", "unread", "favorite"] as const).map((value) => (
+          <button
+            className={filter === value ? "active" : ""}
+            key={value}
+            onClick={() => setFilter(value)}
+          >
+            {value === "all" ? "全部" : value === "unread" ? "未读" : "收藏"}
+          </button>
+        ))}
+      </div>
+      {notice ? <div className="panel-notice error">{notice}</div> : null}
+      <div className="communication-body">
+        <div className="communication-list">
           {messages.map((message) => (
             <button
-              className={`message-index-item ${selectedId === message.id ? "active" : ""}`}
+              className={`communication-list-item ${
+                !message.read_at ? "unread" : ""
+              } ${selectedId === message.id ? "active" : ""}`}
               key={message.id}
-              onClick={() => void selectMessage(message)}
+              onClick={() => setSelectedId(message.id)}
             >
-              <span>
-                {!message.read_at ? <i /> : null}
+              <span className="communication-list-meta">
+                <EnvelopeSimple weight="fill" />
                 {contentLabels[message.type]}
+                {message.favorite ? <Star weight="fill" /> : null}
               </span>
               <strong>{message.title}</strong>
-              <small>{formatDate(message.created_at)}</small>
+              <time>{formatDate(message.created_at)}</time>
             </button>
           ))}
-          {!messages.length ? <div className="data-empty">这个筛选下没有消息。</div> : null}
-        </aside>
-
-        <article className="message-detail data-card">
+          {!messages.length ? (
+            <div className="communication-list-empty">这个筛选下没有消息。</div>
+          ) : null}
+        </div>
+        <article className="communication-detail">
           {selected ? (
             <>
               <span className="eyebrow">{contentLabels[selected.type]}</span>
-              <h2>{selected.title}</h2>
+              <h3>{selected.title}</h3>
               <time>{formatDate(selected.created_at)}</time>
               <p>{selected.body}</p>
-              <div className="message-actions">
+              <div className="communication-actions">
                 <button
                   className={selected.liked ? "active" : ""}
                   onClick={() => void patch(selected, { liked: !selected.liked })}
                 >
+                  <Heart weight={selected.liked ? "fill" : "regular"} />
                   {selected.liked ? "已喜欢" : "喜欢"}
                 </button>
                 <button
                   className={selected.favorite ? "active" : ""}
-                  onClick={() => void patch(selected, { favorite: !selected.favorite })}
+                  onClick={() =>
+                    void patch(selected, { favorite: !selected.favorite })
+                  }
                 >
+                  <Star weight={selected.favorite ? "fill" : "regular"} />
                   {selected.favorite ? "已收藏" : "收藏"}
                 </button>
                 <button
                   className={selected.remind_later ? "active" : ""}
                   onClick={() =>
-                    void patch(selected, { remind_later: !selected.remind_later })
+                    void patch(selected, {
+                      remind_later: !selected.remind_later,
+                    })
                   }
                 >
-                  {selected.remind_later ? "已稍后看" : "稍后再看"}
+                  <Bell weight={selected.remind_later ? "fill" : "regular"} />
+                  稍后再看
                 </button>
               </div>
-              <footer>审核状态：{selected.review_status} · 消息保存在 Orange Pi</footer>
+              <footer>
+                审核状态：{selected.review_status} · 数据保存在 Orange Pi
+              </footer>
             </>
           ) : (
-            <div className="data-empty">从左侧选择一封通信。</div>
+            <div className="communication-detail-empty">选择一封通信查看内容。</div>
           )}
         </article>
       </div>
@@ -492,7 +747,7 @@ export function RelationshipPage({
         paused: profile.paused,
       });
       await onRefresh();
-      setNotice("同行设置已保存在 Pi");
+      setNotice("同行设置已保存");
     } catch (error) {
       setNotice((error as Error).message);
     } finally {
@@ -501,38 +756,29 @@ export function RelationshipPage({
   }
 
   async function downloadExport() {
-    setBusy("export");
-    try {
-      const payload = await exportCompanionData();
-      const blob = new Blob([JSON.stringify(payload, null, 2)], {
-        type: "application/json",
-      });
-      const url = URL.createObjectURL(blob);
-      const anchor = document.createElement("a");
-      anchor.href = url;
-      anchor.download = `hardware-pi-companion-${new Date().toISOString().slice(0, 10)}.json`;
-      anchor.click();
-      URL.revokeObjectURL(url);
-      setNotice("同行数据已导出；API Key 和聊天记录不在导出内容中");
-    } catch (error) {
-      setNotice((error as Error).message);
-    } finally {
-      setBusy("");
-    }
+    const payload = await exportCompanionData();
+    const blob = new Blob([JSON.stringify(payload, null, 2)], {
+      type: "application/json",
+    });
+    const url = URL.createObjectURL(blob);
+    const anchor = document.createElement("a");
+    anchor.href = url;
+    anchor.download = `hardware-pi-companion-${new Date().toISOString().slice(0, 10)}.json`;
+    anchor.click();
+    window.setTimeout(() => URL.revokeObjectURL(url), 500);
   }
 
   async function deleteAll() {
     if (
       !window.confirm(
-        "确定删除全部同行资料、记忆和通信吗？API 配置不会被删除，但此操作无法撤销。",
+        "确定删除全部同行资料、记忆和通信吗？API 配置不会被删除。",
       )
     ) {
       return;
     }
     setBusy("delete");
     try {
-      const reset = await deleteCompanionData();
-      onDeleted(reset);
+      onDeleted(await deleteCompanionData());
     } catch (error) {
       setNotice((error as Error).message);
     } finally {
@@ -541,71 +787,62 @@ export function RelationshipPage({
   }
 
   return (
-    <section className="data-page">
-      <header className="data-header">
+    <section className="companion-settings-panel embedded" aria-label="同行设置">
+      <header className="panel-section-header">
         <div>
-          <span className="eyebrow">RELATIONSHIP CONTROL</span>
-          <h1>同行设置</h1>
-          <p>暂停不会删除任何资料；关闭记忆后，现有记忆保留但不会提供给模型。</p>
+          <span className="eyebrow">COMPANION CONTROL</span>
+          <h2>同行设置</h2>
+          <p>所有授权都可以随时调整。</p>
         </div>
-        <span className={`relationship-state ${profile.paused ? "paused" : ""}`}>
-          {profile.paused ? "同行已暂停" : "同行中"}
-        </span>
+        <SlidersIcon />
       </header>
+      <form className="companion-settings-scroll" onSubmit={save}>
+        <div className={`companion-status-card ${profile.paused ? "paused" : ""}`}>
+          {profile.paused ? (
+            <PauseCircle weight="fill" />
+          ) : (
+            <PlayCircle weight="fill" />
+          )}
+          <span>
+            <strong>{profile.paused ? "角色同行已暂停" : "角色同行正在运行"}</strong>
+            <small>
+              {profile.paused
+                ? "记忆和个性化上下文不会提供给模型"
+                : `已有 ${snapshot.counts.memories} 条共同记忆`}
+            </small>
+          </span>
+          <button
+            type="button"
+            onClick={() => setProfile({ ...profile, paused: !profile.paused })}
+          >
+            {profile.paused ? "恢复" : "暂停"}
+          </button>
+        </div>
 
-      <form className="relationship-grid" onSubmit={save}>
-        <section className="data-card setting-section">
-          <h2>基本资料</h2>
+        <label className="companion-setting-field">
+          角色对你的称呼
+          <input
+            value={profile.display_name}
+            maxLength={24}
+            onChange={(event) =>
+              setProfile({ ...profile, display_name: event.target.value })
+            }
+          />
+        </label>
+
+        <ToggleRow
+          label="允许主动联系"
+          detail="关闭后只响应你的主动操作"
+          checked={profile.proactive_contact_enabled}
+          onChange={(checked) =>
+            setProfile({ ...profile, proactive_contact_enabled: checked })
+          }
+        />
+
+        <div className="companion-setting-time-grid">
           <label>
-            <span>称呼</span>
-            <input
-              value={profile.display_name}
-              maxLength={24}
-              onChange={(event) =>
-                setProfile({ ...profile, display_name: event.target.value })
-              }
-            />
-          </label>
-          <div className="time-grid">
-            <label>
-              <span>勿扰开始</span>
-              <input
-                type="time"
-                value={profile.quiet_hours.start}
-                onChange={(event) =>
-                  setProfile({
-                    ...profile,
-                    quiet_hours: {
-                      ...profile.quiet_hours,
-                      start: event.target.value,
-                    },
-                  })
-                }
-              />
-            </label>
-            <label>
-              <span>勿扰结束</span>
-              <input
-                type="time"
-                value={profile.quiet_hours.end}
-                onChange={(event) =>
-                  setProfile({
-                    ...profile,
-                    quiet_hours: {
-                      ...profile.quiet_hours,
-                      end: event.target.value,
-                    },
-                  })
-                }
-              />
-            </label>
-          </div>
-          <label>
-            <span>每周主动联系上限：{profile.weekly_contact_limit} 次</span>
-            <input
-              type="range"
-              min={0}
-              max={7}
+            每周主动上限
+            <select
               value={profile.weekly_contact_limit}
               onChange={(event) =>
                 setProfile({
@@ -613,62 +850,98 @@ export function RelationshipPage({
                   weekly_contact_limit: Number(event.target.value),
                 })
               }
+            >
+              {[0, 1, 2, 3, 4, 5, 6, 7].map((value) => (
+                <option key={value} value={value}>{value} 次</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            勿扰开始
+            <input
+              type="time"
+              value={profile.quiet_hours.start}
+              onChange={(event) =>
+                setProfile({
+                  ...profile,
+                  quiet_hours: {
+                    ...profile.quiet_hours,
+                    start: event.target.value,
+                  },
+                })
+              }
             />
           </label>
-        </section>
+          <label>
+            勿扰结束
+            <input
+              type="time"
+              value={profile.quiet_hours.end}
+              onChange={(event) =>
+                setProfile({
+                  ...profile,
+                  quiet_hours: {
+                    ...profile.quiet_hours,
+                    end: event.target.value,
+                  },
+                })
+              }
+            />
+          </label>
+        </div>
 
-        <section className="data-card setting-section">
-          <h2>授权与关系</h2>
-          <Toggle
-            label="个性化陪伴"
-            detail="允许使用称呼和已授权资料"
+        <div className="companion-setting-toggle-grid">
+          <ToggleRow
+            label="有限个性化"
+            detail="使用称呼和已授权资料"
             checked={profile.personalization_enabled}
             onChange={(checked) =>
               setProfile({ ...profile, personalization_enabled: checked })
             }
           />
-          <Toggle
+          <ToggleRow
             label="长期记忆"
-            detail="允许引用已确认的共同记忆"
+            detail="允许引用已确认记忆"
             checked={profile.memory_enabled}
             onChange={(checked) =>
               setProfile({ ...profile, memory_enabled: checked })
             }
           />
-          <Toggle
-            label="主动联系"
-            detail="下一阶段启用完整的频率与勿扰执行策略"
-            checked={profile.proactive_contact_enabled}
+          <ToggleRow
+            label="低频召回"
+            detail="需要单独授权"
+            checked={profile.recall_enabled}
             onChange={(checked) =>
-              setProfile({ ...profile, proactive_contact_enabled: checked })
+              setProfile({ ...profile, recall_enabled: checked })
             }
           />
-          <Toggle
-            label="暂停同行"
-            detail="暂停个性化和记忆引用，不删除数据"
-            checked={profile.paused}
-            onChange={(checked) => setProfile({ ...profile, paused: checked })}
-          />
-        </section>
-
-        {notice ? <div className="control-notice relationship-notice">{notice}</div> : null}
-        <div className="relationship-actions">
-          <button className="primary-action" disabled={Boolean(busy)}>
-            {busy === "save" ? "保存中…" : "保存同行设置"}
-          </button>
-          <button type="button" className="secondary-action" onClick={() => void downloadExport()}>
-            导出同行数据
-          </button>
-          <button type="button" className="danger-action" onClick={() => void deleteAll()}>
-            删除全部同行数据
-          </button>
         </div>
+
+        {notice ? <div className="panel-notice">{notice}</div> : null}
+        <button className="companion-save-settings" disabled={Boolean(busy)}>
+          {busy === "save" ? "保存中…" : "保存同行设置"}
+        </button>
+
+        <section className="companion-danger-zone">
+          <strong>数据管理</strong>
+          <p>导出不包含 API Key；删除后无法恢复，但不会删除模型配置。</p>
+          <div>
+            <button type="button" onClick={() => void downloadExport()}>
+              <DownloadSimple />
+              导出数据
+            </button>
+            <button type="button" onClick={() => void deleteAll()}>
+              <Trash />
+              删除全部
+            </button>
+          </div>
+        </section>
       </form>
     </section>
   );
 }
 
-function Toggle({
+function ToggleRow({
   label,
   detail,
   checked,
@@ -680,21 +953,22 @@ function Toggle({
   onChange: (checked: boolean) => void;
 }) {
   return (
-    <label className="setting-toggle">
+    <label className="companion-setting-toggle">
       <span>
         <strong>{label}</strong>
         <small>{detail}</small>
       </span>
-      <span className="switch">
-        <input
-          type="checkbox"
-          checked={checked}
-          onChange={(event) => onChange(event.target.checked)}
-        />
-        <span />
-      </span>
+      <input
+        type="checkbox"
+        checked={checked}
+        onChange={(event) => onChange(event.target.checked)}
+      />
     </label>
   );
+}
+
+function SlidersIcon() {
+  return <ShieldCheck weight="duotone" />;
 }
 
 function formatDate(value: string) {
