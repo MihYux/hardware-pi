@@ -5,6 +5,8 @@ from typing import Literal
 
 from pydantic import BaseModel, Field, HttpUrl, field_validator
 
+from .defaults import COSYVOICE_CONFIG
+
 
 ProviderName = Literal["deepseek", "zhipu", "cosyvoice"]
 
@@ -31,19 +33,17 @@ class VoiceOutputSettings(BaseModel):
     rate: float = Field(default=1, ge=0.7, le=1.3)
     voice_rights_confirmed: bool = False
     voice_id: str = Field(
-        default=(
-            "cosyvoice-v3.5-flash-marchpet-"
-            "eb86bcaeea5f40669b1798191950529a"
-        ),
+        default=str(COSYVOICE_CONFIG["voiceId"]),
         min_length=1,
         max_length=240,
     )
-    sample_rate: int = Field(default=24_000, ge=8_000, le=48_000)
+    sample_rate: int = Field(
+        default=int(COSYVOICE_CONFIG["sampleRate"]),
+        ge=8_000,
+        le=48_000,
+    )
     instruction: str = Field(
-        default=(
-            "请用自然、活泼、亲切的年轻女性语气表达，"
-            "吐字清晰，避免过度夸张。"
-        ),
+        default=str(COSYVOICE_CONFIG["defaultInstruction"]),
         max_length=120,
     )
 
@@ -83,8 +83,8 @@ class ControlPlaneSettings(BaseModel):
     )
     cosyvoice: ProviderSettings = Field(
         default_factory=lambda: ProviderSettings(
-            base_url="https://dashscope.aliyuncs.com/api/v1",
-            model="cosyvoice-v3.5-flash",
+            base_url=str(COSYVOICE_CONFIG["baseUrl"]),
+            model=str(COSYVOICE_CONFIG["model"]),
         )
     )
     routing: RoutingSettings = Field(default_factory=RoutingSettings)

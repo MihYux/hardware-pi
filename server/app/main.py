@@ -113,7 +113,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="ReHoYo Hardware Pi Control Plane",
-    version="0.6.2",
+    version="0.7.0",
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -162,6 +162,10 @@ async def health():
         "status": "ok",
         "service": "hardware-pi",
         "version": app.version,
+        "authentication": {
+            "mode": runtime.auth_mode,
+            "required": runtime.auth_required,
+        },
         "modules": {
             "companion": {"port": runtime.port},
             "workbench": {"port": runtime.workbench_port},

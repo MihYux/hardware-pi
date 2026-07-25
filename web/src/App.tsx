@@ -46,6 +46,7 @@ import type {
   ProviderView,
   VoiceSettings,
 } from "./types";
+import { createClientId } from "./id";
 import { VoicePlayer, type VoiceState } from "./voice";
 
 type PanelTab =
@@ -94,6 +95,9 @@ export default function App() {
   const [admin, setAdmin] = useState(adminToken());
   const [activeAdmin, setActiveAdmin] = useState(adminToken());
   const [connectionAttempt, setConnectionAttempt] = useState(0);
+  const [authenticationRequired, setAuthenticationRequired] = useState<
+    boolean | null
+  >(null);
   const [messages, setMessages] = useState<ChatMessage[]>([welcome]);
   const [snapshot, setSnapshot] = useState<CompanionSnapshot | null>(null);
   const [expression, setExpression] = useState<Expression>("bright");
@@ -101,7 +105,7 @@ export default function App() {
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [connection, setConnection] = useState<ConnectionState>(
-    device ? "connecting" : "unpaired",
+    "connecting",
   );
   const [notice, setNotice] = useState("");
   const [workbenchPort, setWorkbenchPort] = useState(3000);
@@ -121,13 +125,20 @@ export default function App() {
 
   useEffect(() => {
     void fetchServiceInfo()
-      .then((service) => setWorkbenchPort(service.modules.workbench.port))
-      .catch(() => undefined);
+      .then((service) => {
+        setWorkbenchPort(service.modules.workbench.port);
+        setAuthenticationRequired(service.authentication.required);
+      })
+      .catch((error) => {
+        setConnection("offline");
+        setNotice((error as Error).message);
+      });
   }, []);
 
   useEffect(() => {
     let cancelled = false;
-    if (!activeDevice) {
+    if (authenticationRequired === null) return;
+    if (authenticationRequired && !activeDevice) {
       setSnapshot(null);
       setVoiceSettings(null);
       setConnection("unpaired");
@@ -135,7 +146,11 @@ export default function App() {
     }
 
     setConnection("connecting");
-    setNotice("正在验证设备令牌和管理令牌…");
+    setNotice(
+      authenticationRequired
+        ? "正在验证设备令牌和管理令牌…"
+        : "正在连接 Orange Pi…",
+    );
     void (async () => {
       try {
         const [history, companion] = await Promise.all([
@@ -167,7 +182,7 @@ export default function App() {
           if (!cancelled) setVoiceSettings(null);
         });
 
-      if (!activeAdmin) {
+      if (authenticationRequired && !activeAdmin) {
         setConnection("ready");
         setNotice("设备已连接；填写管理令牌后可使用统一 API 设置。");
         return;
@@ -194,7 +209,12 @@ export default function App() {
     return () => {
       cancelled = true;
     };
-  }, [activeAdmin, activeDevice, connectionAttempt]);
+  }, [
+    activeAdmin,
+    activeDevice,
+    authenticationRequired,
+    connectionAttempt,
+  ]);
 
   useEffect(
     () => () => voicePlayer.current?.stop(false),
@@ -268,9 +288,9 @@ export default function App() {
   async function submit(event: FormEvent) {
     event.preventDefault();
     const message = draft.trim();
-    if (!message || busy || !deviceToken()) return;
+    if (!message || busy || !snapshot) return;
     const userMessage: ChatMessage = {
-      id: crypto.randomUUID(),
+      id: createClientId(),
       role: "user",
       content: message,
     };
@@ -316,7 +336,7 @@ export default function App() {
     setMessages((items) => [
       ...items,
       {
-        id: crypto.randomUUID(),
+        id: createClientId(),
         role: "assistant",
         content: line,
         provider: "local",
@@ -377,7 +397,7 @@ export default function App() {
       setMessages((items) => [
         ...items,
         {
-          id: crypto.randomUUID(),
+          id: createClientId(),
           role: "assistant",
           content: "拍好啦！这张照片已经收进共同相册，之后也可以随时关闭引用或删除。",
           provider: "local",
@@ -425,14 +445,16 @@ export default function App() {
             >
               <Briefcase weight="fill" />
             </button>
-            <button
-              className="icon-button"
-              aria-label="连接设置"
-              title="连接设置"
-              onClick={openPairing}
-            >
-              <LinkSimple weight="bold" />
-            </button>
+            {authenticationRequired ? (
+              <button
+                className="icon-button"
+                aria-label="连接设置"
+                title="连接设置"
+                onClick={openPairing}
+              >
+                <LinkSimple weight="bold" />
+              </button>
+            ) : null}
             <button
               className="icon-button"
               aria-label="设置"
@@ -499,12 +521,12 @@ export default function App() {
                     value={draft}
                     maxLength={120}
                     placeholder={
-                      deviceToken() ? "和三月七说点什么……" : "请先连接 Orange Pi"
+                      snapshot ? "和三月七说点什么……" : "正在连接 Orange Pi"
                     }
-                    disabled={!deviceToken() || busy}
+                    disabled={!snapshot || busy}
                     onChange={(event) => setDraft(event.target.value)}
                   />
-                  <button disabled={!draft.trim() || busy || !deviceToken()}>
+                  <button disabled={!draft.trim() || busy || !snapshot}>
                     <PaperPlaneTilt weight="fill" />
                   </button>
                 </form>
@@ -558,14 +580,16 @@ export default function App() {
             >
               <ArrowLeft weight="bold" />
             </button>
-            <button
-              className="icon-button"
-              aria-label="连接设置"
-              title="连接设置"
-              onClick={openPairing}
-            >
-              <LinkSimple weight="bold" />
-            </button>
+            {authenticationRequired ? (
+              <button
+                className="icon-button"
+                aria-label="连接设置"
+                title="连接设置"
+                onClick={openPairing}
+              >
+                <LinkSimple weight="bold" />
+              </button>
+            ) : null}
           </nav>
 
           <nav className="main-nav" aria-label="功能导航">
@@ -655,6 +679,7 @@ export default function App() {
             ) : panelTab === "voice" ? (
               <VoicePanel
                 adminTokenValue={activeAdmin}
+                authenticationRequired={authenticationRequired === true}
                 onNeedPairing={openPairing}
                 onUpdated={refreshVoiceSettings}
               />
@@ -677,6 +702,7 @@ export default function App() {
             ) : (
               <ControlPanel
                 adminTokenValue={activeAdmin}
+                authenticationRequired={authenticationRequired === true}
                 onNeedPairing={openPairing}
               />
             )}
@@ -857,10 +883,12 @@ function ChatPanel({
 
 function VoicePanel({
   adminTokenValue,
+  authenticationRequired,
   onNeedPairing,
   onUpdated,
 }: {
   adminTokenValue: string;
+  authenticationRequired: boolean;
   onNeedPairing: () => void;
   onUpdated: () => Promise<void>;
 }) {
@@ -873,7 +901,7 @@ function VoicePanel({
   const previewAudio = useRef<HTMLAudioElement | null>(null);
 
   useEffect(() => {
-    if (!adminTokenValue) return;
+    if (authenticationRequired && !adminTokenValue) return;
     setBusy("load");
     void fetchControlSettings()
       .then((settings) => {
@@ -882,7 +910,7 @@ function VoicePanel({
       })
       .catch((error) => setNotice((error as Error).message))
       .finally(() => setBusy(""));
-  }, [adminTokenValue]);
+  }, [adminTokenValue, authenticationRequired]);
 
   useEffect(
     () => () => {
@@ -937,7 +965,7 @@ function VoicePanel({
     }
   }
 
-  if (!adminTokenValue) {
+  if (authenticationRequired && !adminTokenValue) {
     return (
       <section className="settings-panel embedded settings-empty">
         <SpeakerHigh weight="duotone" />
@@ -1168,9 +1196,11 @@ function ToggleSetting({
 
 function ControlPanel({
   adminTokenValue,
+  authenticationRequired,
   onNeedPairing,
 }: {
   adminTokenValue: string;
+  authenticationRequired: boolean;
   onNeedPairing: () => void;
 }) {
   const [settings, setSettings] = useState<ControlSettings | null>(null);
@@ -1181,9 +1211,12 @@ function ControlPanel({
     useState<ControlSettings["routing"] | null>(null);
   const [busy, setBusy] = useState("");
   const [notice, setNotice] = useState("");
+  const [testResults, setTestResults] = useState<
+    Record<string, { kind: "progress" | "success" | "error"; text: string }>
+  >({});
 
   useEffect(() => {
-    if (!adminTokenValue) return;
+    if (authenticationRequired && !adminTokenValue) return;
     setBusy("load");
     void fetchControlSettings()
       .then((next) => {
@@ -1200,7 +1233,7 @@ function ControlPanel({
       })
       .catch((error) => setNotice((error as Error).message))
       .finally(() => setBusy(""));
-  }, [adminTokenValue]);
+  }, [adminTokenValue, authenticationRequired]);
 
   function updateProvider(
     name: string,
@@ -1250,19 +1283,61 @@ function ControlPanel({
   }
 
   async function test(name: "deepseek" | "zhipu") {
+    const provider = drafts[name];
+    if (!provider.configured && !provider.api_key.trim()) {
+      setTestResults((current) => ({
+        ...current,
+        [name]: {
+          kind: "error",
+          text: "请先填写 API Key，再执行保存并测试。",
+        },
+      }));
+      return;
+    }
     setBusy(`test-${name}`);
     setNotice("");
+    setTestResults((current) => ({
+      ...current,
+      [name]: {
+        kind: "progress",
+        text: "正在保存当前配置并请求模型…",
+      },
+    }));
     try {
+      const next = await saveControlSettings({
+        providers: {
+          [name]: {
+            enabled: provider.enabled,
+            base_url: provider.base_url,
+            model: provider.model,
+            ...(provider.api_key.trim()
+              ? { api_key: provider.api_key.trim() }
+              : {}),
+          },
+        },
+      });
+      setSettings(next);
+      setDrafts((current) => ({
+        ...current,
+        [name]: { ...next[name], api_key: "" },
+      }));
       const result = await testProvider(name);
-      setNotice(`${name} 连接成功 · ${result.model} · ${result.latency_ms}ms`);
+      const message = `连接成功 · ${result.model} · ${result.latency_ms}ms`;
+      setTestResults((current) => ({
+        ...current,
+        [name]: { kind: "success", text: message },
+      }));
     } catch (error) {
-      setNotice((error as Error).message);
+      setTestResults((current) => ({
+        ...current,
+        [name]: { kind: "error", text: (error as Error).message },
+      }));
     } finally {
       setBusy("");
     }
   }
 
-  if (!adminTokenValue) {
+  if (authenticationRequired && !adminTokenValue) {
     return (
       <section className="settings-panel embedded settings-empty">
         <GearSix weight="duotone" />
@@ -1369,11 +1444,19 @@ function ControlPanel({
                   disabled={Boolean(busy)}
                   onClick={() => void test(name)}
                 >
-                  {busy === `test-${name}` ? "测试中…" : "测试连接"}
+                  {busy === `test-${name}` ? "测试中…" : "保存并测试"}
                 </button>
               ) : (
                 <small className="phase-note">详细授权与试听请打开“语音”页</small>
               )}
+              {testResults[name] ? (
+                <small
+                  className={`provider-test-result ${testResults[name].kind}`}
+                  aria-live="polite"
+                >
+                  {testResults[name].text}
+                </small>
+              ) : null}
             </article>
           );
         })}

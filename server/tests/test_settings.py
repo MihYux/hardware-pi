@@ -1,4 +1,5 @@
 from pathlib import Path
+import json
 
 import pytest
 
@@ -13,17 +14,21 @@ from app.settings_store import SettingsStore
 
 def test_defaults_match_official_desktop_models(tmp_path: Path):
     settings = SettingsStore(tmp_path).load()
+    shared = json.loads(
+        (
+            Path(__file__).resolve().parents[2]
+            / "shared"
+            / "cosyvoice-config.json"
+        ).read_text(encoding="utf-8")
+    )
 
     assert settings.schema_version == 2
     assert settings.deepseek.model == "deepseek-v4-flash"
     assert settings.cosyvoice.base_url == (
         "https://dashscope.aliyuncs.com/api/v1"
     )
-    assert settings.cosyvoice.model == "cosyvoice-v3.5-flash"
-    assert settings.voice.voice_id == (
-        "cosyvoice-v3.5-flash-marchpet-"
-        "eb86bcaeea5f40669b1798191950529a"
-    )
+    assert settings.cosyvoice.model == shared["model"]
+    assert settings.voice.voice_id == shared["voiceId"]
 
 
 def test_v1_default_models_are_migrated_without_losing_secrets(

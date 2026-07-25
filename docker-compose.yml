@@ -1,9 +1,7 @@
 services:
   hardware-pi:
-    build:
-      context: .
-      dockerfile: Dockerfile
-    image: rehoyo/hardware-pi:local
+    image: ghcr.io/mihyux/hardware-pi:${HARDWARE_PI_IMAGE_TAG:-latest}
+    pull_policy: missing
     restart: unless-stopped
     env_file:
       - path: .env
@@ -31,10 +29,8 @@ services:
       - no-new-privileges:true
 
   workbench:
-    build:
-      context: ./workbench
-      dockerfile: Dockerfile
-    image: rehoyo/hardware-pi-workbench:local
+    image: ghcr.io/mihyux/hardware-pi-workbench:${HARDWARE_PI_IMAGE_TAG:-latest}
+    pull_policy: missing
     restart: unless-stopped
     depends_on:
       hardware-pi:
@@ -43,10 +39,10 @@ services:
       DATA_DIR: /data
       HARDWARE_PI_GATEWAY: "1"
       AI_PROVIDER: deepseek
-      DEEPSEEK_API_KEY: ${HARDWARE_PI_SERVICE_TOKEN}
+      DEEPSEEK_API_KEY: ${HARDWARE_PI_SERVICE_TOKEN:-lan-no-auth}
       DEEPSEEK_MODEL: hardware-pi-router
       DEEPSEEK_BASE_URL: http://hardware-pi:8000/api/openai/v1
-      ZHIPU_API_KEY: ${HARDWARE_PI_SERVICE_TOKEN}
+      ZHIPU_API_KEY: ${HARDWARE_PI_SERVICE_TOKEN:-lan-no-auth}
       GLM_MODEL: hardware-pi-zhipu-router
       GLM_BASE_URL: http://hardware-pi:8000/api/zhipu/v1
       MARCH7TH_BRIDGE_DIR: /bridge

@@ -1,0 +1,14 @@
+services:
+  hardware-pi:
+    image: rehoyo/hardware-pi:local
+    pull_policy: never
+    build:
+      context: .
+      dockerfile: Dockerfile
+
+  workbench:
+    image: rehoyo/hardware-pi-workbench:local
+    pull_policy: never
+    build:
+      context: ./workbench
+      dockerfile: Dockerfile

@@ -6,7 +6,9 @@ from app import main
 from app.companion_store import CompanionStore
 from app.conversations import ConversationStore
 from app.security import require_device
+from app.security import require_admin
 from app.security import require_service
+from app.models import ProviderPatch, SettingsPatch
 from app.settings_store import SettingsStore
 
 
@@ -94,6 +96,48 @@ def test_workbench_search_uses_control_plane_route(monkeypatch):
                     {"body": {"search_query": "崩坏：星穹铁道"}},
                 )
             ]
+    finally:
+        main.app.dependency_overrides.clear()
+
+
+def test_provider_connection_endpoint_reports_real_probe(
+    tmp_path: Path,
+    monkeypatch,
+):
+    store = SettingsStore(tmp_path)
+    store.patch(
+        SettingsPatch(
+            providers={
+                "deepseek": ProviderPatch(api_key="sk-test-provider")
+            }
+        )
+    )
+
+    class FakeProvider:
+        def __init__(self, settings):
+            assert settings.api_key == "sk-test-provider"
+
+        async def test(self):
+            return 17, "连接成功"
+
+    monkeypatch.setattr(main, "settings_store", store)
+    monkeypatch.setattr(main, "OpenAICompatibleProvider", FakeProvider)
+    main.app.dependency_overrides[require_admin] = lambda: None
+    try:
+        with TestClient(main.app) as client:
+            response = client.post(
+                "/api/v1/control/providers/deepseek/test"
+            )
+
+        assert response.status_code == 200
+        assert response.json() == {
+            "provider": "deepseek",
+            "configured": True,
+            "ok": True,
+            "model": "deepseek-v4-flash",
+            "latency_ms": 17,
+            "message": "连接成功",
+        }
     finally:
         main.app.dependency_overrides.clear()
 

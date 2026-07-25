@@ -14,31 +14,22 @@ if ! docker compose version >/dev/null 2>&1; then
   exit 1
 fi
 
+CREATED_ENV=0
 if [ ! -f .env ]; then
   cp .env.example .env
-  python3 - "$ROOT_DIR/.env" <<'PY'
-from pathlib import Path
-import secrets
-import sys
-
-path = Path(sys.argv[1])
-content = path.read_text(encoding="utf-8")
-for placeholder in (
-    "replace-with-a-long-random-admin-token",
-    "replace-with-a-long-random-device-token",
-    "replace-with-a-long-random-service-token",
-):
-    content = content.replace(placeholder, secrets.token_urlsafe(32), 1)
-path.write_text(content, encoding="utf-8")
-PY
+  CREATED_ENV=1
   chmod 600 .env
-  echo "Created .env with random access tokens."
-  echo "Add provider API keys with: nano $ROOT_DIR/.env"
+  echo "Created .env in trusted-LAN mode (no browser tokens required)."
+fi
+
+if [ "$CREATED_ENV" -eq 1 ] && [ -t 0 ] && [ -t 1 ]; then
+  python3 "$ROOT_DIR/deploy/configure.py" "$ROOT_DIR/.env"
+  chmod 600 .env
 fi
 
 mkdir -p .data/workbench .data/bridge/inbox .data/bridge/processed .data/bridge/quarantine
 chmod 700 .data
-docker compose up -d --build
+"$ROOT_DIR/deploy/start.sh"
 
 echo
 echo "Hardware Pi is starting."
@@ -47,4 +38,5 @@ PUBLISHED_PORT=$(docker compose port hardware-pi 8000 2>/dev/null | awk -F: 'END
 WORKBENCH_PORT=$(docker compose port workbench 3000 2>/dev/null | awk -F: 'END {print $NF}')
 echo "Companion: http://${PI_ADDRESS:-orange-pi.local}:${PUBLISHED_PORT:-8000}"
 echo "Workbench: http://${PI_ADDRESS:-orange-pi.local}:${WORKBENCH_PORT:-3000}"
-echo "Tokens are stored in: $ROOT_DIR/.env"
+echo "Model keys and local settings are stored in: $ROOT_DIR/.env"
+echo "Local-build fallback: ./deploy/build-local.sh"

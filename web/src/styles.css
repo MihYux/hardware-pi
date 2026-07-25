@@ -401,6 +401,26 @@ textarea:disabled {
   font-size: 9px;
 }
 
+.provider-test-result {
+  display: block;
+  padding: 7px 9px;
+  border-radius: 9px;
+  color: #756579;
+  background: #f5eff8;
+  font-size: 10px;
+  line-height: 1.45;
+}
+
+.provider-test-result.success {
+  color: #34725b;
+  background: #e9f7ef;
+}
+
+.provider-test-result.error {
+  color: #a84761;
+  background: #fff0f3;
+}
+
 .pet-notice {
   position: absolute;
   z-index: 30;

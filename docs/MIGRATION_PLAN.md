@@ -59,6 +59,17 @@ Hardware Pi 是面向 Orange Pi 的无 Electron 运行时。迁移原则是直�
 - 隐藏自动候选、草稿通信、后台 Campaign、聊天、日志与密钥不导入；
 - 基于原 ID 的稳定映射保证重复导入幂等。
 
+Orange Pi 首次可运行与部署优化已在 0.7.0 完成：
+
+- 默认可信局域网免鉴权，手机无需复制令牌即可连接；
+- 安装阶段在终端安全写入 DeepSeek、智谱和 DashScope Key；
+- GitHub Actions 发布与 Git commit 对应的 ARM64 镜像；
+- Pi 默认拉取预构建镜像，失败时自动回退本地构建；
+- `.dockerignore`、npm 与 pip 缓存将重复构建压缩为增量构建；
+- 兼容不支持 `crypto.randomUUID()` 的旧版手机浏览器；
+- Provider 测试先保存当前配置，再显示实际连接结果；
+- CosyVoice 默认值直接读取正式版共享配置。
+
 ## 能力保留与替换
 
 | 原 IPC | Hardware Pi |

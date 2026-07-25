@@ -8,6 +8,7 @@ import type {
   MemoryRecord,
   VoiceSettings,
 } from "./types";
+import { createClientId } from "./id";
 
 const DEVICE_TOKEN_KEY = "rehoyo.hardwarePi.deviceToken";
 const ADMIN_TOKEN_KEY = "rehoyo.hardwarePi.adminToken";
@@ -45,7 +46,7 @@ export function saveTokens(device: string, admin: string) {
 export function sessionId() {
   const existing = localStorage.getItem(SESSION_KEY);
   if (existing) return existing;
-  const next = `phone-${crypto.randomUUID()}`;
+  const next = createClientId("phone-");
   localStorage.setItem(SESSION_KEY, next);
   return next;
 }
@@ -88,6 +89,10 @@ async function localFetch(
 
 export async function fetchServiceInfo(): Promise<{
   version: string;
+  authentication: {
+    mode: "off" | "token";
+    required: boolean;
+  };
   modules: {
     companion: { port: number };
     workbench: { port: number };

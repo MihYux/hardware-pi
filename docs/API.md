@@ -1,10 +1,14 @@
 # Hardware Pi API
 
-所有接口默认与手机页面同源。生产环境必须配置三个不同的长随机令牌：
+所有接口默认与手机页面同源。当前 Orange Pi 首次部署使用 `HARDWARE_PI_AUTH_MODE=off`，在可信局域网内不要求网页令牌。不要把服务直接暴露到公网。
 
-- `HARDWARE_PI_ADMIN_TOKEN`：修改 Provider 和路由。
-- `HARDWARE_PI_DEVICE_TOKEN`：手机对话与读取会话。
+需要令牌鉴权时将 `HARDWARE_PI_AUTH_MODE=token`，并配置：
+
+- `HARDWARE_PI_ADMIN_TOKEN`：修改 Provider 和路由；
+- `HARDWARE_PI_DEVICE_TOKEN`：手机对话与读取会话；
 - `HARDWARE_PI_SERVICE_TOKEN`：ReHoYo 工作台和大型项目调用 Gateway。
+
+以下示例中的鉴权 Header 在 `off` 模式下可以省略。
 
 ## 健康检查
 
@@ -12,7 +16,7 @@
 GET /api/v1/health
 ```
 
-不需要令牌，只返回 Provider 是否配置，不返回密钥。
+不需要令牌，只返回 Provider 是否配置、鉴权模式和模块端口，不返回密钥。
 
 ## 控制面板
 
@@ -80,7 +84,7 @@ CosyVoice 使用三项独立配置：
 - 复刻音色 ID：`cosyvoice-v3.5-flash-marchpet-eb86bcaeea5f40669b1798191950529a`
 - DashScope API Key：保存在 Pi 控制面板，不会返回手机
 
-正式版附带的复刻音色 ID 是否可用取决于当前 DashScope 账号及业务空间权限；若接口提示音色无权访问，请替换为该账号下可用的音色 ID。
+该复刻音色 ID 是项目作者上传声音后制作并从正式版恢复的固定配置，服务端直接读取 `shared/cosyvoice-config.json`；不要把它替换成模型 ID。
 
 读取不含密钥的手机语音设置：
 

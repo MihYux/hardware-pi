@@ -9,6 +9,7 @@ import type {
   CharacterPlanRelease, CharacterRegionWorkspace, CharacterReleaseRegion,
   CharacterReleaseSnapshot, CharacterReleaseTask, CharacterReleaseTaskInput, ReleaseObjective,
 } from "@/lib/character-release-types";
+import { createClientId } from "@/lib/client-id";
 import styles from "./character-release.module.css";
 
 type Step = "tasks" | "region" | "release" | "optimization";
@@ -22,7 +23,7 @@ const steps: Array<{ id: Step; number: string; label: string; note: string; icon
 
 const blankTask = (): CharacterReleaseTaskInput => ({
   title: "", objective: "recall", theme: "", narrative: "", timeWindow: "", consentConfirmed: false,
-  facts: [{ id: crypto.randomUUID(), label: "核心事实", value: "", source: "" }],
+  facts: [{ id: createClientId(), label: "核心事实", value: "", source: "" }],
 });
 
 async function call<T>(url: string, init?: RequestInit) {
