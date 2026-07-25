@@ -72,7 +72,7 @@ Orange Pi 首次可运行与部署优化已在 0.7.0 完成：
 
 原生 ARM64 部署已在 0.8.0 完成：
 
-- GitHub Release 提供携带 Node 22、网页构建产物、Next.js standalone 与 Python 3.11/3.12 ARM64 wheels 的校验包；
+- GitHub Release 提供携带 Node 22、网页构建产物、Next.js standalone 与 Python 3.11/3.12/3.13 ARM64 wheels 的校验包；
 - systemd 分别管理桌宠/API 与工作台，不依赖 Docker 守护进程；
 - 首次切换自动导入 Docker 版本的 `.env` 与 `.data`，程序、配置和数据目录相互分离；
 - `rehoyo update/status/logs/configure/rollback` 提供统一运维入口，健康检查失败时保留上一原生版本；

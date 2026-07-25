@@ -77,9 +77,9 @@ fi
 
 PYTHON_MINOR=$(python3 -c 'import sys; print(f"{sys.version_info.major}.{sys.version_info.minor}")')
 case "$PYTHON_MINOR" in
-  3.11|3.12) ;;
+  3.11|3.12|3.13) ;;
   *)
-    echo "Python 3.11 or 3.12 is required; detected: $PYTHON_MINOR" >&2
+    echo "Python 3.11, 3.12 or 3.13 is required; detected: $PYTHON_MINOR" >&2
     exit 1
     ;;
 esac

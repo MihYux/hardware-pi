@@ -7,6 +7,7 @@ VERSION=${2:-$(git -C "$ROOT_DIR" rev-parse HEAD)}
 NODE_BINARY=${3:-$(command -v node)}
 WHEELS_311=${4:-}
 WHEELS_312=${5:-}
+WHEELS_313=${6:-}
 ARCHIVE="$OUTPUT_DIR/hardware-pi-linux-arm64.tar.gz"
 
 for required_path in \
@@ -51,6 +52,10 @@ fi
 if [ -n "$WHEELS_312" ] && [ -d "$WHEELS_312" ]; then
   mkdir -p "$BUNDLE/wheels/3.12"
   cp "$WHEELS_312/"* "$BUNDLE/wheels/3.12/"
+fi
+if [ -n "$WHEELS_313" ] && [ -d "$WHEELS_313" ]; then
+  mkdir -p "$BUNDLE/wheels/3.13"
+  cp "$WHEELS_313/"* "$BUNDLE/wheels/3.13/"
 fi
 
 printf '%s\n' "$VERSION" > "$BUNDLE/VERSION"

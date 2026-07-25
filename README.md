@@ -7,17 +7,17 @@
 
 透明窗口、置顶、托盘、拖窗、多屏适配和 Electron 安装包不会迁入。模型密钥统一保存在 Pi，工作台与桌宠都通过同一控制面板选择 DeepSeek、智谱 GLM 或 CosyVoice。
 
-当前 0.8.0 已完成正式版核心链路的无 Electron 迁移，并把部署目标调整为“一次安装即可运行”：
+当前 0.8.1 已完成正式版核心链路的无 Electron 迁移，并把部署目标调整为“一次安装即可运行”：
 
 - 工作台发布不可变交付包后，Pi 会校验 checksum 和玩家可见字段，再依据主动联系授权、暂停、勿扰、24 小时间隔、每周上限、版本消息频率和召回授权决定发送或延后；内容还会经过本地安全规则与可降级的模型语义评审，最终进入手机通信中心。非法交付会进入隔离目录，不会影响主服务。
 - CosyVoice 保留原版复刻音色 ID、声音授权确认、语速、音量、手动播放和自动朗读。Pi 代为请求 DashScope，再通过 SSE/PCM 流式队列发给手机；真实 API Key 不会离开 Pi。
 - 同行设置中的“导入正式版 v4”可以合并正式桌面版隐私导出或记忆导出。它只迁移同行偏好、可管理记忆和已审核通信，不导入 API Key、自由聊天、Campaign 后台数据或执行日志；重复导入不会产生副本。
-- Orange Pi 默认下载 GitHub Release 中的原生 ARM64 发布包，由 systemd 运行 FastAPI 与 Next.js standalone；发布包携带 Node 22、前端构建产物和 Python 3.11/3.12 ARM64 wheels，不要求安装 Docker，也不会在 Pi 上执行 npm、Vite 或 Next.js 编译。
+- Orange Pi 默认下载 GitHub Release 中的原生 ARM64 发布包，由 systemd 运行 FastAPI 与 Next.js standalone；发布包携带 Node 22、前端构建产物和 Python 3.11、3.12、3.13 ARM64 wheels，兼容 Debian Trixie，不要求安装 Docker，也不会在 Pi 上执行 npm、Vite 或 Next.js 编译。
 - 默认使用可信局域网免鉴权模式，手机打开页面即可连接；旧版手机浏览器不支持 `crypto.randomUUID()` 时也可以正常点击人物、聊天和创建本地会话。
 
 ## 部署到 Orange Pi
 
-要求：ARM64 Debian、Ubuntu 或 Orange Pi OS，能够使用 `sudo` 和 systemd。安装器会通过 `apt` 自动补齐 CA 证书、curl、Python、venv、pip、tar、gzip 与基础 C++ 运行库；Node 22 已包含在发布包中。
+要求：ARM64 Debian、Ubuntu 或 Orange Pi OS，能够使用 `sudo` 和 systemd，系统 Python 为 3.11、3.12 或 3.13。安装器会通过 `apt` 自动补齐 CA 证书、curl、Python、venv、pip、tar、gzip 与基础 C++ 运行库；Node 22 已包含在发布包中。
 
 仓库是公开仓库，使用 HTTPS clone，不需要 SSH Key：
 

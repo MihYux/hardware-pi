@@ -63,6 +63,18 @@ jobs:
             -r server/requirements.txt \
             -d "${RUNNER_TEMP}/wheels/3.12"
 
+      - name: Download Python 3.13 ARM64 wheels
+        uses: actions/setup-python@v6
+        with:
+          python-version: "3.13"
+
+      - name: Prepare Python 3.13 wheelhouse
+        run: |
+          mkdir -p "${RUNNER_TEMP}/wheels/3.13"
+          python -m pip download --only-binary=:all: \
+            -r server/requirements.txt \
+            -d "${RUNNER_TEMP}/wheels/3.13"
+
       - name: Package native runtime
         run: |
           ./deploy/build-native-bundle.sh \
@@ -70,7 +82,8 @@ jobs:
             "${GITHUB_SHA}" \
             "$(command -v node)" \
             "${RUNNER_TEMP}/wheels/3.11" \
-            "${RUNNER_TEMP}/wheels/3.12"
+            "${RUNNER_TEMP}/wheels/3.12" \
+            "${RUNNER_TEMP}/wheels/3.13"
           cd dist
           sha256sum -c hardware-pi-linux-arm64.tar.gz.sha256
           tar -tzf hardware-pi-linux-arm64.tar.gz | grep -E \
