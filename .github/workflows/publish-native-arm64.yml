@@ -71,8 +71,9 @@ jobs:
             "$(command -v node)" \
             "${RUNNER_TEMP}/wheels/3.11" \
             "${RUNNER_TEMP}/wheels/3.12"
-          sha256sum -c dist/hardware-pi-linux-arm64.tar.gz.sha256
-          tar -tzf dist/hardware-pi-linux-arm64.tar.gz | grep -E \
+          cd dist
+          sha256sum -c hardware-pi-linux-arm64.tar.gz.sha256
+          tar -tzf hardware-pi-linux-arm64.tar.gz | grep -E \
             '^\./(VERSION|runtime/node|server/app/main.py|web/dist/index.html|workbench/server.js)$'
 
       - name: Publish rolling native release
