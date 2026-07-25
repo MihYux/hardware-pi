@@ -47,6 +47,7 @@ import type {
   VoiceSettings,
 } from "./types";
 import { createClientId } from "./id";
+import { clearWebsiteCacheAndReload } from "./cache";
 import { VoicePlayer, type VoiceState } from "./voice";
 
 type PanelTab =
@@ -114,6 +115,7 @@ export default function App() {
   );
   const [voiceState, setVoiceState] = useState<VoiceState>("idle");
   const [activeSpeech, setActiveSpeech] = useState("");
+  const [cacheResetting, setCacheResetting] = useState(false);
   const messageEnd = useRef<HTMLDivElement>(null);
   const voicePlayer = useRef<VoicePlayer | null>(null);
   if (!voicePlayer.current) {
@@ -264,6 +266,12 @@ export default function App() {
     (
       document.getElementById("pairing") as HTMLDialogElement | null
     )?.close();
+  }
+
+  async function resetWebsiteCache() {
+    setCacheResetting(true);
+    setNotice("正在清除网站缓存、旧认证和本地会话…");
+    await clearWebsiteCacheAndReload();
   }
 
   function openPanel(tab: PanelTab) {
@@ -445,16 +453,14 @@ export default function App() {
             >
               <Briefcase weight="fill" />
             </button>
-            {authenticationRequired ? (
-              <button
-                className="icon-button"
-                aria-label="连接设置"
-                title="连接设置"
-                onClick={openPairing}
-              >
-                <LinkSimple weight="bold" />
-              </button>
-            ) : null}
+            <button
+              className="icon-button"
+              aria-label="认证与网站缓存"
+              title="认证与网站缓存"
+              onClick={openPairing}
+            >
+              <LinkSimple weight="bold" />
+            </button>
             <button
               className="icon-button"
               aria-label="设置"
@@ -580,16 +586,14 @@ export default function App() {
             >
               <ArrowLeft weight="bold" />
             </button>
-            {authenticationRequired ? (
-              <button
-                className="icon-button"
-                aria-label="连接设置"
-                title="连接设置"
-                onClick={openPairing}
-              >
-                <LinkSimple weight="bold" />
-              </button>
-            ) : null}
+            <button
+              className="icon-button"
+              aria-label="认证与网站缓存"
+              title="认证与网站缓存"
+              onClick={openPairing}
+            >
+              <LinkSimple weight="bold" />
+            </button>
           </nav>
 
           <nav className="main-nav" aria-label="功能导航">
@@ -729,7 +733,7 @@ export default function App() {
           <div className="dialog-heading">
             <div>
               <span className="eyebrow">LOCAL PAIRING</span>
-              <h2>连接 Orange Pi</h2>
+              <h2>认证与网站缓存</h2>
             </div>
             <button
               className="dialog-close"
@@ -746,35 +750,61 @@ export default function App() {
               ×
             </button>
           </div>
-          <label>
-            <span>设备令牌</span>
-            <input
-              type="password"
-              value={device}
-              onChange={(event) => setDevice(event.target.value)}
-              placeholder="HARDWARE_PI_DEVICE_TOKEN"
-            />
-          </label>
-          <label>
-            <span>管理令牌</span>
-            <input
-              type="password"
-              value={admin}
-              onChange={(event) => setAdmin(event.target.value)}
-              placeholder="HARDWARE_PI_ADMIN_TOKEN"
-            />
-          </label>
-          <p>
-            令牌只保存在当前浏览器；保存后会分别验证设备接口和管理接口。
-            模型 API Key 始终留在 Pi。
-          </p>
-          <button
-            className="primary-action"
-            type="submit"
-            disabled={!device.trim()}
-          >
-            {connection === "connecting" ? "重新验证" : "保存并连接"}
-          </button>
+          {authenticationRequired === false ? (
+            <div className="authentication-status">
+              <strong>当前为局域网免鉴权模式</strong>
+              <span>手机无需填写设备令牌或管理令牌即可连接 Orange Pi。</span>
+            </div>
+          ) : (
+            <>
+              <label>
+                <span>设备令牌</span>
+                <input
+                  type="password"
+                  value={device}
+                  onChange={(event) => setDevice(event.target.value)}
+                  placeholder="HARDWARE_PI_DEVICE_TOKEN"
+                />
+              </label>
+              <label>
+                <span>管理令牌</span>
+                <input
+                  type="password"
+                  value={admin}
+                  onChange={(event) => setAdmin(event.target.value)}
+                  placeholder="HARDWARE_PI_ADMIN_TOKEN"
+                />
+              </label>
+              <p>
+                令牌只保存在当前浏览器；保存后会分别验证设备接口和管理接口。
+                模型 API Key 始终留在 Pi。
+              </p>
+              <button
+                className="primary-action"
+                type="submit"
+                disabled={!device.trim()}
+              >
+                {connection === "connecting" ? "重新验证" : "保存并连接"}
+              </button>
+            </>
+          )}
+          <section className="cache-reset-card" aria-label="网站缓存">
+            <div>
+              <strong>网站缓存与本地认证</strong>
+              <span>
+                清除旧页面、Service Worker、浏览器令牌和本地会话，然后重新载入。
+                不会删除 Pi 上的 API Key、记忆、相册或工作台数据。
+              </span>
+            </div>
+            <button
+              className="danger-action"
+              type="button"
+              disabled={cacheResetting}
+              onClick={() => void resetWebsiteCache()}
+            >
+              {cacheResetting ? "正在清除…" : "一键清除并刷新"}
+            </button>
+          </section>
         </form>
       </dialog>
     </main>

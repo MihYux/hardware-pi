@@ -2095,6 +2095,40 @@ textarea:disabled {
   line-height: 1.55;
 }
 
+.authentication-status,
+.cache-reset-card {
+  display: grid;
+  gap: 5px;
+  padding: 12px;
+  border: 1px solid #e7dce7;
+  border-radius: 14px;
+  background: rgb(255 255 255 / 72%);
+}
+
+.authentication-status strong,
+.cache-reset-card strong {
+  color: #6d5b75;
+  font-size: 11px;
+}
+
+.authentication-status span,
+.cache-reset-card span {
+  color: #8b7e8e;
+  font-size: 9px;
+  line-height: 1.55;
+}
+
+.cache-reset-card {
+  gap: 10px;
+  margin-top: 2px;
+  border-color: #efd9e0;
+  background: #fff8fa;
+}
+
+.cache-reset-card .danger-action {
+  width: 100%;
+}
+
 @keyframes pet-idle-float {
   0%,
   100% {

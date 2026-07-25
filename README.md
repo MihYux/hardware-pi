@@ -7,7 +7,7 @@
 
 透明窗口、置顶、托盘、拖窗、多屏适配和 Electron 安装包不会迁入。模型密钥统一保存在 Pi，工作台与桌宠都通过同一控制面板选择 DeepSeek、智谱 GLM 或 CosyVoice。
 
-当前 0.7.0 已完成正式版核心链路的无 Electron 迁移，并把部署目标调整为“一次安装即可运行”：
+当前 0.7.1 已完成正式版核心链路的无 Electron 迁移，并把部署目标调整为“一次安装即可运行”：
 
 - 工作台发布不可变交付包后，Pi 会校验 checksum 和玩家可见字段，再依据主动联系授权、暂停、勿扰、24 小时间隔、每周上限、版本消息频率和召回授权决定发送或延后；内容还会经过本地安全规则与可降级的模型语义评审，最终进入手机通信中心。非法交付会进入隔离目录，不会影响主服务。
 - CosyVoice 保留原版复刻音色 ID、声音授权确认、语速、音量、手动播放和自动朗读。Pi 代为请求 DashScope，再通过 SSE/PCM 流式队列发给手机；真实 API Key 不会离开 Pi。
@@ -57,6 +57,8 @@ ReHoYo 工作台         http://<Orange-Pi-IP>:3000
 - 语音阶段使用的 CosyVoice 配置。
 
 真实 API Key 不会返回手机。控制面板的“保存并测试”会先保存当前卡片中的 Base URL、模型 ID 和新 API Key，再实际请求模型，并在按钮下方显示成功延迟或具体错误。
+
+如果手机仍显示旧页面、旧令牌或认证错误，打开网页设置中的“认证与网站缓存”，点击“一键清除并刷新”。它会注销旧 Service Worker、删除本站缓存以及浏览器中的令牌和会话 ID，再从 Pi 重新载入；不会删除 Pi 上的 API Key、长期记忆、相册或工作台数据。
 
 默认 DeepSeek 模型与正式版一致，为 `deepseek-v4-flash`。CosyVoice 直接复用正式版 [shared/cosyvoice-config.json](shared/cosyvoice-config.json)：模型 ID 为 `cosyvoice-v3.5-flash`，你制作的复刻音色 ID 为 `cosyvoice-v3.5-flash-marchpet-eb86bcaeea5f40669b1798191950529a`，DashScope API Key 独立保存在 Pi。
 
