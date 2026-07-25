@@ -2,6 +2,7 @@ import { useEffect, useMemo, useRef, useState, type FormEvent } from "react";
 import {
   adminToken,
   deviceToken,
+  fetchCompanionSnapshot,
   fetchControlSettings,
   fetchHistory,
   saveControlSettings,
@@ -9,14 +10,26 @@ import {
   sendChat,
   testProvider,
 } from "./api";
+import {
+  CommunicationsPage,
+  MemoriesPage,
+  Onboarding,
+  RelationshipPage,
+} from "./CompanionData";
 import type {
   ChatMessage,
+  CompanionSnapshot,
   ControlSettings,
   Expression,
   ProviderView,
 } from "./types";
 
-type Screen = "companion" | "control";
+type Screen =
+  | "companion"
+  | "memories"
+  | "communications"
+  | "relationship"
+  | "control";
 
 const expressionCopy: Record<Expression, string> = {
   bright: "陪伴中",
@@ -28,7 +41,7 @@ const expressionCopy: Record<Expression, string> = {
 const welcome: ChatMessage = {
   id: "welcome",
   role: "assistant",
-  content: "开拓者，手机屏幕已经连上啦！先填好设备令牌，咱们就能在局域网里聊天。",
+  content: "开拓者，手机就是咱的新窗口啦！连接 Orange Pi 后，随时都可以来这里聊聊天。",
   provider: "local",
 };
 
@@ -38,6 +51,7 @@ export default function App() {
   const [activeDevice, setActiveDevice] = useState(deviceToken());
   const [admin, setAdmin] = useState(adminToken());
   const [messages, setMessages] = useState<ChatMessage[]>([welcome]);
+  const [snapshot, setSnapshot] = useState<CompanionSnapshot | null>(null);
   const [expression, setExpression] = useState<Expression>("bright");
   const [draft, setDraft] = useState("");
   const [busy, setBusy] = useState(false);
@@ -49,12 +63,16 @@ export default function App() {
 
   useEffect(() => {
     if (!deviceToken()) return;
-    void fetchHistory()
-      .then((history) => {
+    void Promise.all([fetchHistory(), fetchCompanionSnapshot()])
+      .then(([history, companion]) => {
         if (history.length) setMessages(history);
+        setSnapshot(companion);
         setConnection("ready");
       })
-      .catch(() => setConnection("unauthorized"));
+      .catch(() => {
+        setSnapshot(null);
+        setConnection("unauthorized");
+      });
   }, [activeDevice]);
 
   useEffect(() => {
@@ -72,6 +90,11 @@ export default function App() {
     setActiveDevice(device.trim());
     setConnection(device.trim() ? "offline" : "unauthorized");
     setNotice("访问令牌已保存在当前手机浏览器");
+  }
+
+  async function refreshCompanion() {
+    const next = await fetchCompanionSnapshot();
+    setSnapshot(next);
   }
 
   async function submit(event: FormEvent) {
@@ -130,6 +153,32 @@ export default function App() {
             陪伴
           </button>
           <button
+            className={screen === "memories" ? "active" : ""}
+            onClick={() => setScreen("memories")}
+            disabled={!snapshot?.profile.onboarding_completed}
+          >
+            相册
+          </button>
+          <button
+            className={screen === "communications" ? "active" : ""}
+            onClick={() => setScreen("communications")}
+            disabled={!snapshot?.profile.onboarding_completed}
+          >
+            通信
+            {snapshot?.counts.unread_communications ? (
+              <b className="nav-badge">
+                {snapshot.counts.unread_communications}
+              </b>
+            ) : null}
+          </button>
+          <button
+            className={screen === "relationship" ? "active" : ""}
+            onClick={() => setScreen("relationship")}
+            disabled={!snapshot?.profile.onboarding_completed}
+          >
+            同行
+          </button>
+          <button
             className={screen === "control" ? "active" : ""}
             onClick={() => setScreen("control")}
           >
@@ -142,7 +191,14 @@ export default function App() {
         </span>
       </header>
 
-      {screen === "companion" ? (
+      {snapshot && !snapshot.profile.onboarding_completed ? (
+        <Onboarding
+          onComplete={(next) => {
+            setSnapshot(next);
+            setScreen("companion");
+          }}
+        />
+      ) : screen === "companion" ? (
         <section className="companion-layout">
           <aside className={`character-stage expression-${expression}`}>
             <div className="orbit orbit-one" />
@@ -221,6 +277,25 @@ export default function App() {
             </form>
           </section>
         </section>
+      ) : screen === "memories" && snapshot ? (
+        <MemoriesPage
+          snapshot={snapshot}
+          onRefresh={refreshCompanion}
+        />
+      ) : screen === "communications" && snapshot ? (
+        <CommunicationsPage
+          snapshot={snapshot}
+          onRefresh={refreshCompanion}
+        />
+      ) : screen === "relationship" && snapshot ? (
+        <RelationshipPage
+          snapshot={snapshot}
+          onRefresh={refreshCompanion}
+          onDeleted={(next) => {
+            setSnapshot(next);
+            setScreen("companion");
+          }}
+        />
       ) : (
         <ControlPanel
           adminTokenValue={admin}

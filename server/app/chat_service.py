@@ -2,6 +2,7 @@ from __future__ import annotations
 
 from uuid import uuid4
 
+from .companion_store import CompanionStore
 from .conversations import ConversationStore
 from .models import ChatRequest, ChatResponse
 from .provider import OpenAICompatibleProvider, ProviderError
@@ -21,9 +22,11 @@ class ChatService:
         self,
         settings: SettingsStore,
         conversations: ConversationStore,
+        companion: CompanionStore,
     ):
         self.settings = settings
         self.conversations = conversations
+        self.companion = companion
 
     async def respond(self, request: ChatRequest) -> ChatResponse:
         user_id = f"msg_{uuid4()}"
@@ -59,7 +62,10 @@ class ChatService:
             history.append({"role": "user", "content": request.message})
             provider = OpenAICompatibleProvider(provider_settings)
             try:
-                raw_text, model = await provider.chat(history)
+                raw_text, model = await provider.chat(
+                    history,
+                    self.companion.prompt_context(),
+                )
                 text = review_output(raw_text)
             except ProviderError:
                 fallback = True

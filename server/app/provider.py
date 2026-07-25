@@ -83,13 +83,24 @@ class OpenAICompatibleProvider:
         }
         return result
 
-    async def chat(self, messages: list[dict[str, str]]) -> tuple[str, str]:
+    async def chat(
+        self,
+        messages: list[dict[str, str]],
+        companion_context: str = "",
+    ) -> tuple[str, str]:
+        system_messages = [
+            {"role": "system", "content": load_character_prompt()}
+        ]
+        if companion_context:
+            system_messages.append(
+                {
+                    "role": "system",
+                    "content": companion_context,
+                }
+            )
         result = await self.request(
             {
-                "messages": [
-                    {"role": "system", "content": load_character_prompt()},
-                    *messages[-20:],
-                ],
+                "messages": [*system_messages, *messages[-20:]],
                 "stream": False,
                 "max_tokens": 320,
                 "temperature": 0.7,

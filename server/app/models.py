@@ -3,7 +3,7 @@ from __future__ import annotations
 from datetime import datetime, timezone
 from typing import Literal
 
-from pydantic import BaseModel, Field, HttpUrl
+from pydantic import BaseModel, Field, HttpUrl, field_validator
 
 
 ProviderName = Literal["deepseek", "zhipu", "cosyvoice"]
@@ -99,3 +99,116 @@ class ProviderTestResponse(BaseModel):
     model: str
     latency_ms: int
     message: str
+
+
+ContentType = Literal[
+    "daily",
+    "photo",
+    "postcard",
+    "relationship",
+    "version_preheat",
+    "version_launch",
+    "version_sustain",
+    "recall",
+]
+MemoryType = Literal[
+    "choice",
+    "photo",
+    "postcard",
+    "milestone",
+    "version",
+    "return",
+]
+FirstJoinChoice = Literal[
+    "take_photos",
+    "explore_places",
+    "hear_stories",
+    "walk_slowly",
+]
+
+
+class QuietHours(BaseModel):
+    start: str = "22:00"
+    end: str = "09:00"
+
+    @field_validator("start", "end")
+    @classmethod
+    def validate_clock(cls, value: str) -> str:
+        parts = value.split(":")
+        if (
+            len(parts) != 2
+            or not all(part.isdigit() for part in parts)
+            or len(parts[0]) != 2
+            or len(parts[1]) != 2
+        ):
+            raise ValueError("勿扰时间必须使用 HH:MM 格式。")
+        hour, minute = (int(part) for part in parts)
+        if hour > 23 or minute > 59:
+            raise ValueError("勿扰时间无效。")
+        return value
+
+
+class CompanionPreferences(BaseModel):
+    display_name: str = Field(min_length=1, max_length=24)
+    region: Literal["china", "japan", "north_america"] = "china"
+    language: str = Field(default="zh-CN", min_length=2, max_length=24)
+    time_zone: str = Field(default="Asia/Shanghai", min_length=1, max_length=80)
+    allowed_content_types: list[ContentType] = Field(
+        default_factory=lambda: ["daily", "photo", "postcard", "relationship"],
+        max_length=8,
+    )
+    proactive_contact_enabled: bool = False
+    recall_enabled: bool = False
+    personalization_enabled: bool = True
+    memory_enabled: bool = True
+    quiet_hours: QuietHours = Field(default_factory=QuietHours)
+    weekly_contact_limit: int = Field(default=2, ge=0, le=7)
+
+
+class OnboardingRequest(CompanionPreferences):
+    accepted_concept: bool
+    accepted_data_flow: bool
+    first_join_choice: FirstJoinChoice | None = None
+    consent_version: str = Field(default="hardware-pi-v1", max_length=80)
+
+
+class CompanionProfilePatch(BaseModel):
+    display_name: str | None = Field(default=None, min_length=1, max_length=24)
+    region: Literal["china", "japan", "north_america"] | None = None
+    language: str | None = Field(default=None, min_length=2, max_length=24)
+    time_zone: str | None = Field(default=None, min_length=1, max_length=80)
+    allowed_content_types: list[ContentType] | None = Field(
+        default=None,
+        max_length=8,
+    )
+    proactive_contact_enabled: bool | None = None
+    recall_enabled: bool | None = None
+    personalization_enabled: bool | None = None
+    memory_enabled: bool | None = None
+    quiet_hours: QuietHours | None = None
+    weekly_contact_limit: int | None = Field(default=None, ge=0, le=7)
+    paused: bool | None = None
+
+
+class MemoryCreate(BaseModel):
+    type: MemoryType = "photo"
+    title: str = Field(min_length=1, max_length=80)
+    summary: str = Field(min_length=1, max_length=500)
+    character_text: str = Field(default="", max_length=500)
+    reusable_by_character: bool = True
+    user_confirmed: bool = True
+
+
+class MemoryPatch(BaseModel):
+    title: str | None = Field(default=None, min_length=1, max_length=80)
+    summary: str | None = Field(default=None, min_length=1, max_length=500)
+    character_text: str | None = Field(default=None, max_length=500)
+    reusable_by_character: bool | None = None
+    user_confirmed: bool | None = None
+
+
+class CommunicationPatch(BaseModel):
+    read: bool | None = None
+    favorite: bool | None = None
+    liked: bool | None = None
+    remind_later: bool | None = None

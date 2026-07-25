@@ -18,10 +18,16 @@ from fastapi.responses import JSONResponse
 from fastapi.staticfiles import StaticFiles
 
 from .chat_service import ChatService
+from .companion_store import CompanionStore
 from .conversations import ConversationStore
 from .models import (
     ChatRequest,
     ChatResponse,
+    CommunicationPatch,
+    CompanionProfilePatch,
+    MemoryCreate,
+    MemoryPatch,
+    OnboardingRequest,
     ProviderName,
     ProviderTestResponse,
     SettingsPatch,
@@ -39,7 +45,12 @@ from .settings_store import SettingsStore
 
 settings_store = SettingsStore(runtime.data_dir)
 conversation_store = ConversationStore(runtime.data_dir)
-chat_service = ChatService(settings_store, conversation_store)
+companion_store = CompanionStore(runtime.data_dir)
+chat_service = ChatService(
+    settings_store,
+    conversation_store,
+    companion_store,
+)
 
 
 @asynccontextmanager
@@ -47,12 +58,13 @@ async def lifespan(_: FastAPI):
     runtime.data_dir.mkdir(parents=True, exist_ok=True)
     settings_store.load()
     conversation_store.initialize()
+    companion_store.initialize()
     yield
 
 
 app = FastAPI(
     title="ReHoYo Hardware Pi Control Plane",
-    version="0.1.0",
+    version="0.2.0",
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -72,6 +84,14 @@ async def provider_error_handler(_: Request, error: ProviderError):
     return JSONResponse(
         status_code=error.status_code,
         content={"error": "PROVIDER_ERROR", "message": str(error)},
+    )
+
+
+@app.exception_handler(ValueError)
+async def value_error_handler(_: Request, error: ValueError):
+    return JSONResponse(
+        status_code=400,
+        content={"error": "INVALID_COMPANION_DATA", "message": str(error)},
     )
 
 
@@ -152,6 +172,78 @@ async def conversation_history(
         "sessionId": session_id,
         "messages": conversation_store.recent(session_id),
     }
+
+
+@app.get("/api/v1/companion/snapshot")
+async def companion_snapshot(_: None = Depends(require_device)):
+    return companion_store.snapshot()
+
+
+@app.post("/api/v1/companion/onboarding")
+async def complete_onboarding(
+    request: OnboardingRequest,
+    _: None = Depends(require_device),
+):
+    return companion_store.onboard(request)
+
+
+@app.put("/api/v1/companion/profile")
+async def update_companion_profile(
+    patch: CompanionProfilePatch,
+    _: None = Depends(require_device),
+):
+    return companion_store.update_profile(patch)
+
+
+@app.get("/api/v1/companion/export")
+async def export_companion_data(_: None = Depends(require_device)):
+    return companion_store.export_data()
+
+
+@app.delete("/api/v1/companion/data")
+async def delete_companion_data(_: None = Depends(require_device)):
+    return companion_store.delete_all()
+
+
+@app.post("/api/v1/memories", status_code=201)
+async def create_memory(
+    request: MemoryCreate,
+    _: None = Depends(require_device),
+):
+    return companion_store.create_memory(request)
+
+
+@app.patch("/api/v1/memories/{memory_id}")
+async def update_memory(
+    memory_id: str,
+    patch: MemoryPatch,
+    _: None = Depends(require_device),
+):
+    memory = companion_store.update_memory(memory_id, patch)
+    if not memory:
+        raise HTTPException(status_code=404, detail="没有找到这条记忆。")
+    return memory
+
+
+@app.delete("/api/v1/memories/{memory_id}", status_code=204)
+async def delete_memory(
+    memory_id: str,
+    _: None = Depends(require_device),
+):
+    if not companion_store.delete_memory(memory_id):
+        raise HTTPException(status_code=404, detail="没有找到这条记忆。")
+
+
+@app.patch("/api/v1/communications/{message_id}")
+async def update_communication(
+    message_id: str,
+    patch: CommunicationPatch,
+    _: None = Depends(require_device),
+):
+    message = companion_store.update_communication(message_id, patch)
+    if not message:
+        raise HTTPException(status_code=404, detail="没有找到这条通信。")
+    return message
 
 
 @app.websocket("/api/v1/chat/ws")

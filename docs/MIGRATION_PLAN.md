@@ -4,7 +4,7 @@ Hardware Pi 是面向 Orange Pi 的专用运行时，不是 ReHoYo 正式桌面�
 
 ## 当前里程碑
 
-第一阶段目标是建立不依赖 Electron 的可运行基础：
+第一阶段“不依赖 Electron 的可运行基础”已经完成：
 
 - Python FastAPI 局域网服务；
 - 手机 PWA 人物显示与文字对话；
@@ -14,6 +14,17 @@ Hardware Pi 是面向 Orange Pi 的专用运行时，不是 ReHoYo 正式桌面�
 - SQLite 会话记录；
 - Docker 与 SSH 部署。
 
+第二阶段陪伴数据初步版已经完成：
+
+- 首次进入、概念体验与模型数据流授权；
+- 同行称呼、个性化、长期记忆、勿扰与暂停设置；
+- SQLite 长期记忆和共同旅行相册；
+- 已授权记忆注入模型上下文；
+- 只展示已审核消息的角色通信中心；
+- 已读、喜欢、收藏和稍后看状态；
+- 不包含 API Key 的数据导出；
+- 保留模型配置的同行数据删除。
+
 ## 能力保留与替换
 
 | 原 IPC | Hardware Pi |
@@ -22,9 +33,9 @@ Hardware Pi 是面向 Orange Pi 的专用运行时，不是 ReHoYo 正式桌面�
 | `ai:save-settings` | `PUT /api/v1/control/settings` |
 | `ai:test-connection` | `POST /api/v1/control/providers/:name/test` |
 | `ai:chat` | `POST /api/v1/chat` / WebSocket |
-| `companion:get-data` | 后续迁移为 `/api/v1/companion/snapshot` |
-| `companion:*memory*` | 后续迁移为 `/api/v1/memories` |
-| `companion:*message*` | 后续迁移为 `/api/v1/communications` |
+| `companion:get-data` | `GET /api/v1/companion/snapshot` |
+| `companion:*memory*` | `/api/v1/memories` |
+| `companion:*message*` | `/api/v1/communications/:id`，发行消息写入入口在第四阶段加入 |
 | `tts:*` | 后续迁移为 `/api/v1/tts` 与音频流 |
 | `window:*` | 永久移除，由手机 PWA 和系统服务承担显示与常驻职责 |
 
@@ -44,12 +55,14 @@ Hardware Pi 是面向 Orange Pi 的专用运行时，不是 ReHoYo 正式桌面�
 
 ### 第二阶段：陪伴数据
 
-- 首次进入与授权；
-- 同行偏好；
-- 长期记忆；
-- 共同旅行相册；
-- 角色通信中心；
-- 数据导出与删除。
+- [x] 首次进入与授权；
+- [x] 同行偏好；
+- [x] 长期记忆；
+- [x] 共同旅行相册；
+- [x] 角色通信中心；
+- [x] 数据导出与删除；
+- [ ] 正式桌面版 v4 数据导入和兼容测试；
+- [ ] 在 Orange Pi ARM64 真机完成浏览器、重启和存储验证。
 
 ### 第三阶段：声音
 

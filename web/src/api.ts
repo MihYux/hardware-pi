@@ -1,4 +1,12 @@
-import type { ChatMessage, ChatResponse, ControlSettings } from "./types";
+import type {
+  ChatMessage,
+  ChatResponse,
+  Communication,
+  CompanionProfile,
+  CompanionSnapshot,
+  ControlSettings,
+  MemoryRecord,
+} from "./types";
 
 const DEVICE_TOKEN_KEY = "rehoyo.hardwarePi.deviceToken";
 const ADMIN_TOKEN_KEY = "rehoyo.hardwarePi.adminToken";
@@ -93,4 +101,110 @@ export async function testProvider(provider: "deepseek" | "zhipu") {
     latency_ms: number;
     message: string;
   }>(response);
+}
+
+function deviceHeaders(json = false): HeadersInit {
+  return {
+    Authorization: `Bearer ${deviceToken()}`,
+    ...(json ? { "Content-Type": "application/json" } : {}),
+  };
+}
+
+export async function fetchCompanionSnapshot(): Promise<CompanionSnapshot> {
+  const response = await fetch("/api/v1/companion/snapshot", {
+    headers: deviceHeaders(),
+  });
+  return parseResponse<CompanionSnapshot>(response);
+}
+
+export async function completeOnboarding(
+  input: unknown,
+): Promise<CompanionSnapshot> {
+  const response = await fetch("/api/v1/companion/onboarding", {
+    method: "POST",
+    headers: deviceHeaders(true),
+    body: JSON.stringify(input),
+  });
+  return parseResponse<CompanionSnapshot>(response);
+}
+
+export async function updateCompanionProfile(
+  input: Partial<CompanionProfile>,
+): Promise<CompanionProfile> {
+  const response = await fetch("/api/v1/companion/profile", {
+    method: "PUT",
+    headers: deviceHeaders(true),
+    body: JSON.stringify(input),
+  });
+  return parseResponse<CompanionProfile>(response);
+}
+
+export async function createMemory(input: {
+  type: MemoryRecord["type"];
+  title: string;
+  summary: string;
+  reusable_by_character: boolean;
+  user_confirmed: boolean;
+}): Promise<MemoryRecord> {
+  const response = await fetch("/api/v1/memories", {
+    method: "POST",
+    headers: deviceHeaders(true),
+    body: JSON.stringify(input),
+  });
+  return parseResponse<MemoryRecord>(response);
+}
+
+export async function updateMemory(
+  memoryId: string,
+  input: Partial<MemoryRecord>,
+): Promise<MemoryRecord> {
+  const response = await fetch(`/api/v1/memories/${encodeURIComponent(memoryId)}`, {
+    method: "PATCH",
+    headers: deviceHeaders(true),
+    body: JSON.stringify(input),
+  });
+  return parseResponse<MemoryRecord>(response);
+}
+
+export async function deleteMemory(memoryId: string): Promise<void> {
+  const response = await fetch(`/api/v1/memories/${encodeURIComponent(memoryId)}`, {
+    method: "DELETE",
+    headers: deviceHeaders(),
+  });
+  if (!response.ok) await parseResponse(response);
+}
+
+export async function updateCommunication(
+  messageId: string,
+  input: {
+    read?: boolean;
+    favorite?: boolean;
+    liked?: boolean;
+    remind_later?: boolean;
+  },
+): Promise<Communication> {
+  const response = await fetch(
+    `/api/v1/communications/${encodeURIComponent(messageId)}`,
+    {
+      method: "PATCH",
+      headers: deviceHeaders(true),
+      body: JSON.stringify(input),
+    },
+  );
+  return parseResponse<Communication>(response);
+}
+
+export async function exportCompanionData(): Promise<unknown> {
+  const response = await fetch("/api/v1/companion/export", {
+    headers: deviceHeaders(),
+  });
+  return parseResponse(response);
+}
+
+export async function deleteCompanionData(): Promise<CompanionSnapshot> {
+  const response = await fetch("/api/v1/companion/data", {
+    method: "DELETE",
+    headers: deviceHeaders(),
+  });
+  return parseResponse<CompanionSnapshot>(response);
 }
