@@ -1,0 +1,53 @@
+#!/usr/bin/env sh
+set -eu
+
+PREFIX=/opt/rehoyo
+ENV_FILE=/etc/rehoyo/hardware-pi.env
+
+as_root() {
+  if [ "$(id -u)" -eq 0 ]; then
+    "$@"
+  else
+    sudo "$@"
+  fi
+}
+
+case "${1:-status}" in
+  start)
+    as_root systemctl start rehoyo-api.service rehoyo-workbench.service
+    ;;
+  stop)
+    as_root systemctl stop rehoyo-workbench.service rehoyo-api.service
+    ;;
+  restart)
+    as_root systemctl restart rehoyo-api.service rehoyo-workbench.service
+    ;;
+  status)
+    systemctl --no-pager --full status rehoyo-api.service rehoyo-workbench.service
+    ;;
+  logs)
+    if [ "${2:-}" = "-f" ]; then
+      as_root journalctl -u rehoyo-api.service -u rehoyo-workbench.service -f
+    else
+      as_root journalctl -u rehoyo-api.service -u rehoyo-workbench.service -n 120 --no-pager
+    fi
+    ;;
+  update)
+    as_root /usr/local/lib/rehoyo/install-native.sh --update
+    ;;
+  configure)
+    as_root python3 "$PREFIX/current/deploy/configure.py" "$ENV_FILE"
+    as_root systemctl restart rehoyo-api.service rehoyo-workbench.service
+    ;;
+  rollback)
+    if [ ! -L "$PREFIX/previous" ]; then
+      echo "No previous native release is available." >&2
+      exit 1
+    fi
+    as_root "$PREFIX/current/deploy/rollback-native.sh"
+    ;;
+  *)
+    echo "Usage: rehoyo {start|stop|restart|status|logs [-f]|update|configure|rollback}" >&2
+    exit 2
+    ;;
+esac

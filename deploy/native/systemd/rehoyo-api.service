@@ -1,0 +1,26 @@
+[Unit]
+Description=ReHoYo Hardware Pi API and companion
+Wants=network-online.target
+After=network-online.target
+
+[Service]
+Type=simple
+User=rehoyo
+Group=rehoyo
+WorkingDirectory=/opt/rehoyo/current/server
+EnvironmentFile=/etc/rehoyo/hardware-pi.env
+Environment=PYTHONDONTWRITEBYTECODE=1
+Environment=PYTHONUNBUFFERED=1
+ExecStart=/opt/rehoyo/current/.venv/bin/python -m uvicorn app.main:app --host ${HARDWARE_PI_HOST} --port ${HARDWARE_PI_PORT} --proxy-headers
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=20
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/rehoyo
+
+[Install]
+WantedBy=multi-user.target

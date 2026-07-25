@@ -1,0 +1,25 @@
+[Unit]
+Description=ReHoYo global release workbench
+Wants=network-online.target
+After=network-online.target rehoyo-api.service
+Requires=rehoyo-api.service
+
+[Service]
+Type=simple
+User=rehoyo
+Group=rehoyo
+WorkingDirectory=/opt/rehoyo/current/workbench
+EnvironmentFile=/etc/rehoyo/hardware-pi.env
+ExecStart=/opt/rehoyo/current/deploy/run-workbench.sh
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=25
+UMask=0077
+NoNewPrivileges=true
+PrivateTmp=true
+ProtectHome=true
+ProtectSystem=strict
+ReadWritePaths=/var/lib/rehoyo
+
+[Install]
+WantedBy=multi-user.target

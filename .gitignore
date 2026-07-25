@@ -9,6 +9,7 @@ htmlcov/
 node_modules/
 .next/
 web/dist/
+dist/
 coverage/
 playwright-report/
 test-results/
