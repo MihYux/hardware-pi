@@ -17,6 +17,7 @@ from fastapi import (
 )
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
+from fastapi.responses import Response, StreamingResponse
 from fastapi.staticfiles import StaticFiles
 
 from .chat_service import ChatService
@@ -33,6 +34,7 @@ from .models import (
     ProviderName,
     ProviderTestResponse,
     SettingsPatch,
+    TtsRequest,
 )
 from .provider import OpenAICompatibleProvider, ProviderError
 from .release_bridge import (
@@ -48,6 +50,7 @@ from .security import (
     require_service,
 )
 from .settings_store import SettingsStore
+from .tts_service import TtsError, TtsService
 
 
 settings_store = SettingsStore(runtime.data_dir)
@@ -60,6 +63,7 @@ chat_service = ChatService(
 )
 release_bridge: ReleaseBridgeConsumer | None = None
 release_service: ReleaseService | None = None
+tts_service: TtsService | None = None
 
 
 async def release_worker(stop: asyncio.Event) -> None:
@@ -81,12 +85,13 @@ async def release_worker(stop: asyncio.Event) -> None:
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    global release_bridge, release_service
+    global release_bridge, release_service, tts_service
     runtime.data_dir.mkdir(parents=True, exist_ok=True)
     settings_store.load()
     conversation_store.initialize()
     companion_store.initialize()
     release_service = ReleaseService(companion_store, settings_store)
+    tts_service = TtsService(settings_store)
     release_bridge = ReleaseBridgeConsumer(
         runtime.bridge_dir,
         companion_store.queue_release_delivery,
@@ -107,7 +112,7 @@ async def lifespan(_: FastAPI):
 
 app = FastAPI(
     title="ReHoYo Hardware Pi Control Plane",
-    version="0.4.0",
+    version="0.5.0",
     lifespan=lifespan,
 )
 app.add_middleware(
@@ -127,6 +132,17 @@ async def provider_error_handler(_: Request, error: ProviderError):
     return JSONResponse(
         status_code=error.status_code,
         content={"error": "PROVIDER_ERROR", "message": str(error)},
+    )
+
+
+@app.exception_handler(TtsError)
+async def tts_error_handler(_: Request, error: TtsError):
+    return JSONResponse(
+        status_code=error.status_code,
+        content={
+            "error": error.code,
+            "message": str(error),
+        },
     )
 
 
@@ -183,9 +199,20 @@ async def test_provider(
     _: None = Depends(require_admin),
 ):
     if provider_name == "cosyvoice":
-        raise HTTPException(
-            status_code=501,
-            detail="CosyVoice 测试将在语音迁移阶段启用。",
+        if not tts_service:
+            raise HTTPException(status_code=503, detail="语音服务尚未启动。")
+        started = time.monotonic()
+        result = await tts_service.synthesize(
+            "嗨，开拓者！三月七的语音已经准备好啦！",
+            require_enabled=False,
+        )
+        return ProviderTestResponse(
+            provider=provider_name,
+            configured=True,
+            ok=True,
+            model=result.model,
+            latency_ms=round((time.monotonic() - started) * 1_000),
+            message=f"连接成功 · {result.characters} 字",
         )
     provider_settings = settings_store.provider(provider_name)
     provider = OpenAICompatibleProvider(provider_settings)
@@ -297,6 +324,71 @@ async def update_communication(
     if not message:
         raise HTTPException(status_code=404, detail="没有找到这条通信。")
     return message
+
+
+@app.get("/api/v1/tts/settings")
+async def get_tts_settings(_: None = Depends(require_device)):
+    if not tts_service:
+        raise HTTPException(status_code=503, detail="语音服务尚未启动。")
+    return tts_service.public_settings()
+
+
+@app.post("/api/v1/tts/synthesize")
+async def synthesize_speech(
+    request: TtsRequest,
+    _: None = Depends(require_device),
+):
+    if not tts_service:
+        raise HTTPException(status_code=503, detail="语音服务尚未启动。")
+    result = await tts_service.synthesize(
+        request.text,
+        mood=request.mood,
+    )
+    return Response(
+        content=result.audio,
+        media_type=result.mime_type,
+        headers={
+            "X-TTS-Characters": str(result.characters),
+            "X-TTS-Model": result.model,
+            "Cache-Control": "no-store",
+        },
+    )
+
+
+@app.post("/api/v1/tts/stream")
+async def stream_speech(
+    request: TtsRequest,
+    _: None = Depends(require_device),
+):
+    if not tts_service:
+        raise HTTPException(status_code=503, detail="语音服务尚未启动。")
+    return StreamingResponse(
+        tts_service.stream_events(request.text, mood=request.mood),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-store",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@app.post("/api/v1/tts/test")
+async def test_speech(_: None = Depends(require_admin)):
+    if not tts_service:
+        raise HTTPException(status_code=503, detail="语音服务尚未启动。")
+    result = await tts_service.synthesize(
+        "嗨，开拓者！三月七的语音已经准备好啦！",
+        require_enabled=False,
+    )
+    return Response(
+        content=result.audio,
+        media_type=result.mime_type,
+        headers={
+            "X-TTS-Characters": str(result.characters),
+            "X-TTS-Model": result.model,
+            "Cache-Control": "no-store",
+        },
+    )
 
 
 @app.get("/api/v1/release/status")

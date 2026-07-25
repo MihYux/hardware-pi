@@ -1,6 +1,12 @@
 from pathlib import Path
 
-from app.models import ProviderPatch, SettingsPatch
+import pytest
+
+from app.models import (
+    ProviderPatch,
+    SettingsPatch,
+    VoiceOutputPatch,
+)
 from app.settings_store import SettingsStore
 
 
@@ -58,3 +64,35 @@ def test_missing_persisted_secret_can_bootstrap_from_environment(
     monkeypatch.setenv("DEEPSEEK_API_KEY", "sk-from-orange-pi-env")
 
     assert store.load().deepseek.api_key == "sk-from-orange-pi-env"
+
+
+def test_voice_output_requires_rights_and_revocation_disables_autoplay(
+    tmp_path: Path,
+):
+    store = SettingsStore(tmp_path)
+
+    with pytest.raises(ValueError, match="确认"):
+        store.patch(
+            SettingsPatch(
+                voice=VoiceOutputPatch(enabled=True)
+            )
+        )
+
+    enabled = store.patch(
+        SettingsPatch(
+            voice=VoiceOutputPatch(
+                voice_rights_confirmed=True,
+                enabled=True,
+                auto_play=True,
+            )
+        )
+    )
+    assert enabled.voice.auto_play is True
+
+    revoked = store.patch(
+        SettingsPatch(
+            voice=VoiceOutputPatch(voice_rights_confirmed=False)
+        )
+    )
+    assert revoked.voice.enabled is False
+    assert revoked.voice.auto_play is False

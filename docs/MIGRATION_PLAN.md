@@ -42,6 +42,15 @@ Hardware Pi 是面向 Orange Pi 的无 Electron 运行时。迁移原则是直�
 - 本地规则 + 控制面板 `companion_review` 路由的语义评审；
 - 通信中心队列统计与手动检查。
 
+第三阶段语音输出已在 0.5.0 完成软件迁移：
+
+- 统一控制面板保存 DashScope Provider 与 CosyVoice 音色；
+- 声音权利确认、启用、自动朗读、音量和语速；
+- 非流式 WAV 试听；
+- SSE/PCM 流式代理与手机 Web Audio 播放队列；
+- 手动停止、重复播放取消和文本清洗；
+- API Key 仅保存在 Pi。
+
 ## 能力保留与替换
 
 | 原 IPC | Hardware Pi |
@@ -53,7 +62,7 @@ Hardware Pi 是面向 Orange Pi 的无 Electron 运行时。迁移原则是直�
 | `companion:get-data` | `GET /api/v1/companion/snapshot` |
 | `companion:*memory*` | `/api/v1/memories` |
 | `companion:*message*` | `/api/v1/communications/:id` 与 `/api/v1/release/*` |
-| `tts:*` | 后续迁移为 `/api/v1/tts` 与音频流 |
+| `tts:*` | `/api/v1/tts/settings`、`/synthesize`、`/stream` 与 `/test` |
 | `window:*` | 永久移除，由手机 PWA 和系统服务承担显示与常驻职责 |
 
 ## 永久移除
@@ -82,11 +91,11 @@ GPIO、摄像头和传感器由上层硬件项目按需扩展，不作为网页�
 
 ### 第三阶段：声音
 
-- CosyVoice 设置与连接测试；
-- 流式 TTS；
-- 手机端播放队列；
-- HTTPS 与麦克风权限；
-- 可选 STT。
+- [x] CosyVoice 设置与连接测试；
+- [x] 流式 TTS；
+- [x] 手机端播放队列；
+- [ ] 局域网 HTTPS 与麦克风权限；
+- [ ] 可选 STT。
 
 ### 第四阶段：发行桥接
 

@@ -6,6 +6,7 @@ import type {
   CompanionSnapshot,
   ControlSettings,
   MemoryRecord,
+  VoiceSettings,
 } from "./types";
 
 const DEVICE_TOKEN_KEY = "rehoyo.hardwarePi.deviceToken";
@@ -101,7 +102,7 @@ export async function saveControlSettings(input: unknown): Promise<ControlSettin
   return parseResponse<ControlSettings>(response);
 }
 
-export async function testProvider(provider: "deepseek" | "zhipu") {
+export async function testProvider(provider: "deepseek" | "zhipu" | "cosyvoice") {
   const response = await fetch(`/api/v1/control/providers/${provider}/test`, {
     method: "POST",
     headers: { "X-Admin-Token": adminToken() },
@@ -112,6 +113,33 @@ export async function testProvider(provider: "deepseek" | "zhipu") {
     latency_ms: number;
     message: string;
   }>(response);
+}
+
+export async function fetchVoiceSettings(): Promise<VoiceSettings> {
+  const response = await fetch("/api/v1/tts/settings", {
+    headers: { Authorization: `Bearer ${deviceToken()}` },
+  });
+  return parseResponse<VoiceSettings>(response);
+}
+
+export async function testVoice(): Promise<{
+  audio: Blob;
+  characters: number;
+  model: string;
+}> {
+  const response = await fetch("/api/v1/tts/test", {
+    method: "POST",
+    headers: { "X-Admin-Token": adminToken() },
+  });
+  if (!response.ok) {
+    const payload = await response.json().catch(() => ({}));
+    throw new Error(payload.message || payload.detail || "语音试听失败");
+  }
+  return {
+    audio: await response.blob(),
+    characters: Number(response.headers.get("X-TTS-Characters") || 0),
+    model: response.headers.get("X-TTS-Model") || "",
+  };
 }
 
 function deviceHeaders(json = false): HeadersInit {

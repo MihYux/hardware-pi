@@ -10,8 +10,11 @@ import {
   LinkSimple,
   PaperPlaneTilt,
   SlidersHorizontal,
+  SpeakerHigh,
   SpeakerSlash,
+  SpinnerGap,
   Sparkle,
+  StopCircle,
 } from "@phosphor-icons/react";
 import {
   adminToken,
@@ -21,10 +24,12 @@ import {
   fetchControlSettings,
   fetchHistory,
   fetchServiceInfo,
+  fetchVoiceSettings,
   saveControlSettings,
   saveTokens,
   sendChat,
   testProvider,
+  testVoice,
 } from "./api";
 import {
   CommunicationsPage,
@@ -38,13 +43,16 @@ import type {
   ControlSettings,
   Expression,
   ProviderView,
+  VoiceSettings,
 } from "./types";
+import { VoicePlayer, type VoiceState } from "./voice";
 
 type PanelTab =
   | "chat"
   | "memories"
   | "communications"
   | "relationship"
+  | "voice"
   | "control";
 
 const expressionCopy: Record<Expression, string> = {
@@ -86,7 +94,19 @@ export default function App() {
   >(device ? "offline" : "unauthorized");
   const [notice, setNotice] = useState("");
   const [workbenchPort, setWorkbenchPort] = useState(3000);
+  const [voiceSettings, setVoiceSettings] = useState<VoiceSettings | null>(
+    null,
+  );
+  const [voiceState, setVoiceState] = useState<VoiceState>("idle");
+  const [activeSpeech, setActiveSpeech] = useState("");
   const messageEnd = useRef<HTMLDivElement>(null);
+  const voicePlayer = useRef<VoicePlayer | null>(null);
+  if (!voicePlayer.current) {
+    voicePlayer.current = new VoicePlayer((state) => {
+      setVoiceState(state);
+      if (state === "idle" || state === "error") setActiveSpeech("");
+    });
+  }
 
   useEffect(() => {
     void fetchServiceInfo()
@@ -106,7 +126,15 @@ export default function App() {
         setSnapshot(null);
         setConnection("unauthorized");
       });
+    void fetchVoiceSettings()
+      .then(setVoiceSettings)
+      .catch(() => setVoiceSettings(null));
   }, [activeDevice]);
+
+  useEffect(
+    () => () => voicePlayer.current?.stop(false),
+    [],
+  );
 
   useEffect(() => {
     messageEnd.current?.scrollIntoView({ behavior: "smooth" });
@@ -171,6 +199,9 @@ export default function App() {
     setBusy(true);
     setNotice("");
     try {
+      if (voiceSettings?.auto_play && voiceSettings.enabled) {
+        await voicePlayer.current?.prepare().catch(() => undefined);
+      }
       const response = await sendChat(message, messages);
       setMessages((items) => [
         ...items,
@@ -182,6 +213,13 @@ export default function App() {
         },
       ]);
       setExpression(response.expression);
+      if (
+        voiceSettings?.auto_play &&
+        voiceSettings.enabled &&
+        voiceSettings.configured
+      ) {
+        void playSpeech(response.text, response.expression);
+      }
       setConnection("ready");
       if (response.fallback) {
         setNotice("当前使用本地回复；可在设置中配置模型");
@@ -205,6 +243,41 @@ export default function App() {
       },
     ]);
     setExpression(line.includes("本姑娘") ? "proud" : "bright");
+  }
+
+  async function playSpeech(text: string, mood: Expression) {
+    if (
+      activeSpeech === text &&
+      (voiceState === "synthesizing" || voiceState === "speaking")
+    ) {
+      voicePlayer.current?.stop();
+      return;
+    }
+    if (
+      !voiceSettings?.enabled ||
+      !voiceSettings.voice_rights_confirmed ||
+      !voiceSettings.configured
+    ) {
+      setNotice("请先在语音页确认授权、配置 CosyVoice 并启用语音");
+      openPanel("voice");
+      return;
+    }
+    setActiveSpeech(text);
+    setNotice("");
+    try {
+      await voicePlayer.current?.play(
+        text,
+        mood,
+        voiceSettings.volume,
+      );
+    } catch (error) {
+      setNotice((error as Error).message);
+    }
+  }
+
+  async function refreshVoiceSettings() {
+    const next = await fetchVoiceSettings();
+    setVoiceSettings(next);
   }
 
   async function takePhoto() {
@@ -313,6 +386,33 @@ export default function App() {
                 </div>
               </div>
               <p>{busy ? "等等，咱认真想想……" : currentBubble}</p>
+              <button
+                className={`speech-play-button bubble-speech-button ${
+                  activeSpeech === currentBubble &&
+                  voiceState !== "idle"
+                    ? "active"
+                    : ""
+                }`}
+                aria-label={
+                  activeSpeech === currentBubble &&
+                  voiceState !== "idle"
+                    ? "停止这段语音"
+                    : "播放这段语音"
+                }
+                onClick={() => void playSpeech(currentBubble, expression)}
+              >
+                {activeSpeech === currentBubble &&
+                voiceState === "synthesizing" ? (
+                  <SpinnerGap className="spinning" />
+                ) : activeSpeech === currentBubble &&
+                  voiceState === "speaking" ? (
+                  <StopCircle weight="fill" />
+                ) : voiceSettings?.enabled ? (
+                  <SpeakerHigh weight="fill" />
+                ) : (
+                  <SpeakerSlash />
+                )}
+              </button>
               {bubbleChatOpen ? (
                 <form className="bubble-chat-form" onSubmit={submit}>
                   <input
@@ -398,12 +498,15 @@ export default function App() {
               </button>
             </div>
             <div className="nav-group">
-              <button className="nav-row" disabled title="语音将在下一阶段迁移">
+              <button
+                className={`nav-row ${panelTab === "voice" ? "active" : ""}`}
+                onClick={() => setPanelTab("voice")}
+                title="CosyVoice 语音"
+              >
                 <span className="nav-icon">
-                  <SpeakerSlash />
+                  {voiceSettings?.enabled ? <SpeakerHigh weight="fill" /> : <SpeakerSlash />}
                 </span>
                 <span className="nav-label">语音</span>
-                <span className="phase-label">后续</span>
               </button>
             </div>
             <div className="nav-group">
@@ -465,6 +568,15 @@ export default function App() {
                 messageEnd={messageEnd}
                 onDraft={setDraft}
                 onSubmit={submit}
+                onSpeak={playSpeech}
+                activeSpeech={activeSpeech}
+                voiceState={voiceState}
+              />
+            ) : panelTab === "voice" ? (
+              <VoicePanel
+                adminTokenValue={admin}
+                onNeedPairing={openPairing}
+                onUpdated={refreshVoiceSettings}
               />
             ) : panelTab === "memories" && snapshot ? (
               <MemoriesPage snapshot={snapshot} onRefresh={refreshCompanion} />
@@ -552,6 +664,9 @@ function ChatPanel({
   messageEnd,
   onDraft,
   onSubmit,
+  onSpeak,
+  activeSpeech,
+  voiceState,
 }: {
   messages: ChatMessage[];
   draft: string;
@@ -561,6 +676,9 @@ function ChatPanel({
   messageEnd: React.RefObject<HTMLDivElement | null>;
   onDraft: (value: string) => void;
   onSubmit: (event: FormEvent) => void;
+  onSpeak: (text: string, mood: Expression) => Promise<void>;
+  activeSpeech: string;
+  voiceState: VoiceState;
 }) {
   return (
     <section className="chat-panel embedded" aria-label="聊天">
@@ -581,6 +699,38 @@ function ChatPanel({
           >
             {message.content}
             {message.provider ? <small>{message.provider}</small> : null}
+            {message.role === "assistant" ? (
+              <button
+                className={`speech-play-button message-speech-button ${
+                  activeSpeech === message.content &&
+                  voiceState !== "idle"
+                    ? "active"
+                    : ""
+                }`}
+                aria-label={
+                  activeSpeech === message.content &&
+                  voiceState !== "idle"
+                    ? "停止这段语音"
+                    : "播放这段语音"
+                }
+                onClick={() =>
+                  void onSpeak(
+                    message.content,
+                    message.content.includes("？") ? "curious" : "bright",
+                  )
+                }
+              >
+                {activeSpeech === message.content &&
+                voiceState === "synthesizing" ? (
+                  <SpinnerGap className="spinning" />
+                ) : activeSpeech === message.content &&
+                  voiceState === "speaking" ? (
+                  <StopCircle weight="fill" />
+                ) : (
+                  <SpeakerHigh weight="fill" />
+                )}
+              </button>
+            ) : null}
           </div>
         ))}
         {busy ? <div className="message march">等等，咱认真想想……</div> : null}
@@ -602,6 +752,317 @@ function ChatPanel({
         {notice || "模型不可用时会自动切换为本地回复"}
       </p>
     </section>
+  );
+}
+
+function VoicePanel({
+  adminTokenValue,
+  onNeedPairing,
+  onUpdated,
+}: {
+  adminTokenValue: string;
+  onNeedPairing: () => void;
+  onUpdated: () => Promise<void>;
+}) {
+  const [provider, setProvider] = useState<
+    (ProviderView & { api_key: string }) | null
+  >(null);
+  const [voice, setVoice] = useState<VoiceSettings | null>(null);
+  const [busy, setBusy] = useState("");
+  const [notice, setNotice] = useState("");
+  const previewAudio = useRef<HTMLAudioElement | null>(null);
+
+  useEffect(() => {
+    if (!adminTokenValue) return;
+    setBusy("load");
+    void fetchControlSettings()
+      .then((settings) => {
+        setProvider({ ...settings.cosyvoice, api_key: "" });
+        setVoice(settings.voice);
+      })
+      .catch((error) => setNotice((error as Error).message))
+      .finally(() => setBusy(""));
+  }, [adminTokenValue]);
+
+  useEffect(
+    () => () => {
+      previewAudio.current?.pause();
+      previewAudio.current = null;
+    },
+    [],
+  );
+
+  async function save(preview: boolean) {
+    if (!provider || !voice) return;
+    setBusy(preview ? "preview" : "save");
+    setNotice("");
+    try {
+      const next = await saveControlSettings({
+        providers: {
+          cosyvoice: {
+            enabled: provider.enabled,
+            base_url: provider.base_url,
+            model: provider.model,
+            ...(provider.api_key.trim()
+              ? { api_key: provider.api_key.trim() }
+              : {}),
+          },
+        },
+        voice,
+      });
+      setProvider({ ...next.cosyvoice, api_key: "" });
+      setVoice(next.voice);
+      await onUpdated();
+      if (!preview) {
+        setNotice("语音设置已保存到 Orange Pi");
+        return;
+      }
+      const result = await testVoice();
+      previewAudio.current?.pause();
+      const url = URL.createObjectURL(result.audio);
+      const audio = new Audio(url);
+      audio.volume = next.voice.volume;
+      previewAudio.current = audio;
+      audio.addEventListener(
+        "ended",
+        () => URL.revokeObjectURL(url),
+        { once: true },
+      );
+      await audio.play();
+      setNotice(`试听成功 · ${result.characters} 字 · ${result.model}`);
+    } catch (error) {
+      setNotice((error as Error).message);
+    } finally {
+      setBusy("");
+    }
+  }
+
+  if (!adminTokenValue) {
+    return (
+      <section className="settings-panel embedded settings-empty">
+        <SpeakerHigh weight="duotone" />
+        <span className="eyebrow">VOICE OUTPUT</span>
+        <h2>CosyVoice 语音</h2>
+        <p>填写管理令牌后，可以配置和试听复刻音色。</p>
+        <button className="primary-action" onClick={onNeedPairing}>
+          连接 Orange Pi
+        </button>
+      </section>
+    );
+  }
+
+  if (!provider || !voice) {
+    return (
+      <section className="settings-panel embedded settings-empty">
+        <span className="eyebrow">VOICE OUTPUT</span>
+        <h2>{busy ? "正在读取语音设置…" : "无法读取语音设置"}</h2>
+        {notice ? <p>{notice}</p> : null}
+      </section>
+    );
+  }
+
+  return (
+    <section className="settings-panel embedded voice-panel">
+      <header className="panel-section-header">
+        <div>
+          <span className="eyebrow">VOICE OUTPUT · PCM STREAM</span>
+          <h2>CosyVoice 复刻音色</h2>
+          <p>音频由 Pi 生成并以实时 PCM 队列发送到手机。</p>
+        </div>
+        <SpeakerHigh weight="duotone" />
+      </header>
+
+      <div className="voice-panel-scroll">
+        <article className="voice-provider-card">
+          <div className="voice-provider-heading">
+            <span
+              className={`provider-dot ${
+                provider.configured ? "configured" : ""
+              }`}
+            />
+            <span>
+              <strong>DashScope · {provider.model}</strong>
+              <small>
+                {provider.configured
+                  ? `已配置 ${provider.api_key_masked}`
+                  : "尚未配置 API Key"}
+              </small>
+            </span>
+          </div>
+          <div className="voice-field-grid">
+            <label>
+              <span>Base URL</span>
+              <input
+                value={provider.base_url}
+                onChange={(event) =>
+                  setProvider({ ...provider, base_url: event.target.value })
+                }
+              />
+            </label>
+            <label>
+              <span>模型</span>
+              <input
+                value={provider.model}
+                onChange={(event) =>
+                  setProvider({ ...provider, model: event.target.value })
+                }
+              />
+            </label>
+            <label className="voice-field-wide">
+              <span>更新 DashScope API Key</span>
+              <input
+                type="password"
+                autoComplete="off"
+                value={provider.api_key}
+                placeholder={
+                  provider.configured ? "留空保持不变" : "sk-..."
+                }
+                onChange={(event) =>
+                  setProvider({ ...provider, api_key: event.target.value })
+                }
+              />
+            </label>
+            <label className="voice-field-wide">
+              <span>复刻音色 ID</span>
+              <input
+                value={voice.voice_id}
+                onChange={(event) =>
+                  setVoice({ ...voice, voice_id: event.target.value })
+                }
+              />
+            </label>
+          </div>
+        </article>
+
+        <label className="voice-rights-row">
+          <input
+            type="checkbox"
+            checked={voice.voice_rights_confirmed}
+            onChange={(event) => {
+              const confirmed = event.target.checked;
+              setVoice({
+                ...voice,
+                voice_rights_confirmed: confirmed,
+                enabled: confirmed ? voice.enabled : false,
+                auto_play: confirmed ? voice.auto_play : false,
+              });
+            }}
+          />
+          <span>
+            <strong>声音使用授权确认</strong>
+            <small>
+              我确认对声音样本、复刻音色及当前用途拥有必要授权，
+              并会在授权撤回时停止使用。
+            </small>
+          </span>
+        </label>
+
+        <div className="voice-toggle-grid">
+          <ToggleSetting
+            label="语音输出"
+            detail="允许气泡和聊天消息独立播放"
+            checked={voice.enabled}
+            disabled={!voice.voice_rights_confirmed}
+            onChange={(enabled) =>
+              setVoice({
+                ...voice,
+                enabled,
+                auto_play: enabled ? voice.auto_play : false,
+              })
+            }
+          />
+          <ToggleSetting
+            label="自动朗读"
+            detail="模型回复后自动加入实时播放队列"
+            checked={voice.auto_play}
+            disabled={!voice.enabled}
+            onChange={(auto_play) =>
+              setVoice({ ...voice, auto_play })
+            }
+          />
+        </div>
+
+        <div className="voice-control-grid">
+          <label>
+            <span>语速</span>
+            <select
+              value={voice.rate}
+              onChange={(event) =>
+                setVoice({ ...voice, rate: Number(event.target.value) })
+              }
+            >
+              <option value={0.9}>舒缓 · 0.9×</option>
+              <option value={1}>自然 · 1.0×</option>
+              <option value={1.1}>轻快 · 1.1×</option>
+            </select>
+          </label>
+          <label>
+            <span>手机播放音量 · {Math.round(voice.volume * 100)}%</span>
+            <input
+              type="range"
+              min={0}
+              max={1}
+              step={0.01}
+              value={voice.volume}
+              onChange={(event) =>
+                setVoice({ ...voice, volume: Number(event.target.value) })
+              }
+            />
+          </label>
+        </div>
+
+        {notice ? <div className="panel-notice">{notice}</div> : null}
+        <div className="voice-actions">
+          <button
+            className="secondary-action"
+            disabled={Boolean(busy)}
+            onClick={() => void save(false)}
+          >
+            {busy === "save" ? "保存中…" : "保存语音设置"}
+          </button>
+          <button
+            className="primary-action"
+            disabled={
+              Boolean(busy) ||
+              !voice.voice_rights_confirmed ||
+              (!provider.configured && !provider.api_key.trim())
+            }
+            onClick={() => void save(true)}
+          >
+            {busy === "preview" ? "生成试听中…" : "保存并试听"}
+          </button>
+        </div>
+      </div>
+    </section>
+  );
+}
+
+function ToggleSetting({
+  label,
+  detail,
+  checked,
+  disabled,
+  onChange,
+}: {
+  label: string;
+  detail: string;
+  checked: boolean;
+  disabled?: boolean;
+  onChange: (checked: boolean) => void;
+}) {
+  return (
+    <label className="voice-toggle-row">
+      <span>
+        <strong>{label}</strong>
+        <small>{detail}</small>
+      </span>
+      <input
+        type="checkbox"
+        checked={checked}
+        disabled={disabled}
+        onChange={(event) => onChange(event.target.checked)}
+      />
+    </label>
   );
 }
 
@@ -811,7 +1272,7 @@ function ControlPanel({
                   {busy === `test-${name}` ? "测试中…" : "测试连接"}
                 </button>
               ) : (
-                <small className="phase-note">语音测试将在后续阶段启用</small>
+                <small className="phase-note">详细授权与试听请打开“语音”页</small>
               )}
             </article>
           );

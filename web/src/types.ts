@@ -38,7 +38,24 @@ export type ControlSettings = {
     companion_review: "deepseek" | "zhipu";
     text_to_speech: "cosyvoice";
   };
+  voice: VoiceSettings;
   updated_at: string;
+};
+
+export type VoiceSettings = {
+  enabled: boolean;
+  auto_play: boolean;
+  volume: number;
+  rate: number;
+  voice_rights_confirmed: boolean;
+  voice_id: string;
+  sample_rate: number;
+  instruction: string;
+  provider?: "dashscope";
+  base_url?: string;
+  model?: string;
+  configured?: boolean;
+  provider_enabled?: boolean;
 };
 
 export type ContentType =

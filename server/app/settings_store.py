@@ -46,6 +46,9 @@ class SettingsStore:
         settings.cosyvoice.model = os.getenv(
             "COSYVOICE_MODEL", settings.cosyvoice.model
         )
+        settings.voice.voice_id = os.getenv(
+            "COSYVOICE_VOICE_ID", settings.voice.voice_id
+        )
         return settings
 
     def _merge_missing_environment(
@@ -119,6 +122,22 @@ class SettingsStore:
                     exclude_none=True
                 ).items():
                     setattr(settings.routing, key, value)
+            if patch.voice:
+                voice_update = patch.voice.model_dump(exclude_none=True)
+                if voice_update.get("enabled") and not (
+                    voice_update.get(
+                        "voice_rights_confirmed",
+                        settings.voice.voice_rights_confirmed,
+                    )
+                ):
+                    raise ValueError("请先确认复刻声音的使用授权。")
+                for key, value in voice_update.items():
+                    setattr(settings.voice, key, value)
+                if not settings.voice.voice_rights_confirmed:
+                    settings.voice.enabled = False
+                    settings.voice.auto_play = False
+                if not settings.voice.enabled:
+                    settings.voice.auto_play = False
             return self.save(settings)
 
     def public_view(self) -> dict:

@@ -72,6 +72,44 @@ WS /api/v1/chat/ws?token=<device-token>
 
 已完成首次进入且开启个性化时，服务端会把玩家称呼加入角色上下文；只有同时满足“长期记忆已开启”“玩家已确认”“允许角色引用”的记忆才会加入模型上下文。暂停同行会立即停止个性化和记忆引用。
 
+## CosyVoice 语音
+
+读取不含密钥的手机语音设置：
+
+```http
+GET /api/v1/tts/settings
+Authorization: Bearer <device-token>
+```
+
+生成完整 WAV：
+
+```http
+POST /api/v1/tts/synthesize
+Authorization: Bearer <device-token>
+Content-Type: application/json
+
+{"text": "今天也一起拍照吧！", "mood": "bright"}
+```
+
+实时播放入口使用同一请求体：
+
+```http
+POST /api/v1/tts/stream
+Authorization: Bearer <device-token>
+Content-Type: application/json
+```
+
+响应是 `text/event-stream`，依次包含 `started`、若干 `audio` 和 `complete` 事件；`audio.data.audioBase64` 是 16-bit little-endian 单声道 PCM，采样率见 `sampleRate`。失败时返回 `error` 事件。手机网页已内置 Web Audio 顺序播放、停止和取消旧请求。
+
+管理端试听：
+
+```http
+POST /api/v1/tts/test
+X-Admin-Token: <admin-token>
+```
+
+语音必须同时满足：CosyVoice Provider 已启用且配置 Key、玩家已确认声音使用授权、语音输出已开启。测试接口允许输出开关关闭，但仍要求声音授权和有效 Key。撤销授权会自动关闭语音与自动朗读。
+
 ## 陪伴快照与首次进入
 
 以下接口都使用设备令牌：
